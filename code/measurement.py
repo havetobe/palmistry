@@ -1,6 +1,7 @@
 from PIL import Image, ImageDraw
 import cv2
 import mediapipe as mp
+import numpy as np
 
 def measure(path_to_warped_image_mini, lines):
     heart_thres_x = 0
@@ -35,6 +36,33 @@ def measure(path_to_warped_image_mini, lines):
         heart_line = lines[0]
         head_line = lines[1]
         life_line = lines[2]
+
+        # Drop lines that fall mostly outside the palm region (based on skin mask).
+        img_bgr = cv2.imread(path_to_warped_image_mini)
+        if img_bgr is not None:
+            hsv = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2HSV)
+            lower = np.array([0, 20, 80], dtype=np.uint8)
+            upper = np.array([50, 255, 255], dtype=np.uint8)
+            palm_mask = cv2.inRange(hsv, lower, upper)
+            palm_mask = cv2.morphologyEx(palm_mask, cv2.MORPH_CLOSE, np.ones((5, 5), np.uint8))
+
+            def line_inside_ratio(line):
+                inside = 0
+                for y, x, _, _ in line:
+                    if 0 <= y < palm_mask.shape[0] and 0 <= x < palm_mask.shape[1]:
+                        if palm_mask[y, x] > 0:
+                            inside += 1
+                return inside / max(1, len(line))
+
+            ratios = [line_inside_ratio(heart_line), line_inside_ratio(head_line), line_inside_ratio(life_line)]
+            for idx, ratio in enumerate(ratios):
+                if ratio < 0.7:
+                    if idx == 0:
+                        heart_line = []
+                    elif idx == 1:
+                        head_line = []
+                    else:
+                        life_line = []
 
         heart_line_points = [tuple(reversed(l[:2])) for l in heart_line]
         heart_line_tip = heart_line_points[0]

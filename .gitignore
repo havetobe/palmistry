@@ -1,8 +1,12 @@
 .idea
+.vscode
 .DS_Store
 *.zip
 *.tar.gz
 venv
+__pycache__
+*.pyc
 /data
 /results
+code/results
 /data_failed

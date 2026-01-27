@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>PalmTrace H5 Demo</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="bg-blobs" aria-hidden="true"></div>
+    <main class="app">
+      <header class="hero">
+        <div class="brand">
+          <span class="logo">PT</span>
+          <div>
+            <p class="eyebrow">PalmTrace H5</p>
+            <h1>手掌掌纹识别与三大主线绘制</h1>
+          </div>
+        </div>
+        <p class="subtitle">
+          手机端演示：拍照或导入手掌照片，自动叠加感情线 / 智慧线 / 生命线。
+        </p>
+      </header>
+
+      <section class="panel input-panel">
+        <div class="controls">
+          <button class="btn primary" id="btn-camera">拍照</button>
+          <button class="btn ghost" id="btn-upload">导入照片</button>
+          <button class="btn ghost" id="btn-reset">重置</button>
+        </div>
+        <div class="meta">
+          <span class="badge">JPG / PNG</span>
+          <span class="badge">本地处理</span>
+          <span class="badge">≤ 2s</span>
+        </div>
+        <input id="file-camera" type="file" accept="image/*" capture="environment" hidden />
+        <input id="file-upload" type="file" accept="image/*" hidden />
+      </section>
+
+      <section class="panel canvas-panel">
+        <div class="canvas-wrap">
+          <canvas id="image-canvas"></canvas>
+          <canvas id="overlay-canvas"></canvas>
+          <div class="empty-state" id="empty-state">
+            <p>请拍摄或导入手掌照片</p>
+            <small>建议光线均匀、掌心完整、背景简洁</small>
+          </div>
+        </div>
+        <div class="toggles">
+          <label class="toggle">
+            <input type="checkbox" id="toggle-heart" checked />
+            <span>感情线</span>
+          </label>
+          <label class="toggle">
+            <input type="checkbox" id="toggle-head" checked />
+            <span>智慧线</span>
+          </label>
+          <label class="toggle">
+            <input type="checkbox" id="toggle-life" checked />
+            <span>生命线</span>
+          </label>
+        </div>
+      </section>
+
+      <section class="panel results-panel">
+        <div class="metrics">
+          <div class="metric">
+            <span class="label">识别耗时</span>
+            <strong id="metric-time">-</strong>
+          </div>
+          <div class="metric">
+            <span class="label">感情线置信度</span>
+            <strong id="metric-heart">-</strong>
+          </div>
+          <div class="metric">
+            <span class="label">智慧线置信度</span>
+            <strong id="metric-head">-</strong>
+          </div>
+          <div class="metric">
+            <span class="label">生命线置信度</span>
+            <strong id="metric-life">-</strong>
+          </div>
+        </div>
+        <div class="alerts" id="alerts"></div>
+      </section>
+
+      <section class="panel note-panel">
+        <h2>演示说明</h2>
+        <ul>
+          <li>线条为演示生成，用于展示端侧流程与可视化布局。</li>
+          <li>低光或分辨率不足会提示失败原因。</li>
+          <li>EXIF 方向会自动校正，避免横竖颠倒。</li>
+        </ul>
+      </section>
+    </main>
+
+    <script>
+      window.PALMTRACE_API_URL = "http://127.0.0.1:8000/api/predict";
+    </script>
+    <script src="./app.js"></script>
+  </body>
+</html>
