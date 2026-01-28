@@ -84,6 +84,56 @@
         <div class="alerts" id="alerts"></div>
       </section>
 
+      <section class="panel analysis-panel">
+        <div class="analysis-header">
+          <div>
+            <h2>手相解读（娱乐参考）</h2>
+            <p class="analysis-subtitle">
+              基于心线/智慧线/生命线特征生成的非决定论解读，仅供娱乐。
+            </p>
+          </div>
+          <button class="btn primary" id="btn-interpret" disabled>生成解读</button>
+        </div>
+        <div class="analysis-status" id="analysis-status">尚未生成解读</div>
+        <div class="analysis-content" id="analysis-content">
+          <div class="analysis-card">
+            <h3>整体概览</h3>
+            <p id="analysis-overview">-</p>
+          </div>
+          <div class="analysis-grid">
+            <div class="analysis-card">
+              <h3>性格倾向</h3>
+              <ul id="analysis-traits"></ul>
+            </div>
+            <div class="analysis-card">
+              <h3>优势</h3>
+              <ul id="analysis-strengths"></ul>
+            </div>
+            <div class="analysis-card">
+              <h3>挑战</h3>
+              <ul id="analysis-challenges"></ul>
+            </div>
+            <div class="analysis-card">
+              <h3>关系风格</h3>
+              <ul id="analysis-relationships"></ul>
+            </div>
+            <div class="analysis-card">
+              <h3>事业倾向</h3>
+              <ul id="analysis-careers"></ul>
+            </div>
+            <div class="analysis-card">
+              <h3>自我关怀建议</h3>
+              <ul id="analysis-selfcare"></ul>
+            </div>
+            <div class="analysis-card">
+              <h3>置信提示</h3>
+              <ul id="analysis-confidence"></ul>
+            </div>
+          </div>
+          <div class="analysis-disclaimer" id="analysis-disclaimer">-</div>
+        </div>
+      </section>
+
       <section class="panel note-panel">
         <h2>演示说明</h2>
         <ul>
@@ -96,6 +146,7 @@
 
     <script>
       window.PALMTRACE_API_URL = "http://127.0.0.1:8000/api/predict";
+      window.PALMTRACE_ANALYSIS_URL = "http://127.0.0.1:8000/api/palm/analysis";
     </script>
     <script src="./app.js"></script>
   </body>

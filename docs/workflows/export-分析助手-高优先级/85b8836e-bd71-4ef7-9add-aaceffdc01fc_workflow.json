@@ -1,0 +1,551 @@
+{
+  "ProtoVersion": "V2_6",
+  "WorkflowID": "85b8836e-bd71-4ef7-9add-aaceffdc01fc",
+  "WorkflowName": "分析助手-高优先级-多模型",
+  "WorkflowDesc": "触发条件\n当用户消息同时满足以下条件时，必须调用此工作流：\n1.消息格式为JSON对象\n2.包含 lines、confidences、roi 字段\n3.字段值类型：lines/confidences/roi 为对象\n禁止触发条件\n消息不是JSON格式\n缺少关键字段\n【优先级】最高",
+  "Nodes": [
+    {
+      "NodeID": "ea80887d-613d-4f77-9cb4-070ee1cd0db9",
+      "NodeName": "开始",
+      "NodeDesc": "",
+      "NodeType": "START",
+      "StartNodeData": {
+        "WorkflowParams": []
+      },
+      "Inputs": [],
+      "Outputs": [],
+      "NextNodeIDs": [
+        "4c59424c-d45a-4298-85bb-287e7b849d85"
+      ],
+      "NodeUI": "{\"data\": {\"content\": {\"inputs\": []}, \"isHovering\": false, \"isParallel\": false, \"source\": false, \"target\": true, \"debug\": null, \"error\": false, \"output\": []}, \"position\": {\"x\": -389.8092489163986, \"y\": 655.8777807989087}, \"targetPosition\": \"left\", \"sourcePosition\": \"right\", \"selected\": false, \"measured\": {\"width\": 254, \"height\": 88}, \"dragging\": false}"
+    },
+    {
+      "NodeID": "4c59424c-d45a-4298-85bb-287e7b849d85",
+      "NodeName": "参数提取",
+      "NodeDesc": "",
+      "NodeType": "CODE_EXECUTOR",
+      "CodeExecutorNodeData": {
+        "Code": "# 请保存函数名为main,输入输出均为dict；最终结果会以json字符串方式返回，请勿直接返回不支持json.dumps的对象\nimport json\n\ndef main(params: dict) -> dict:\n    try:\n        user_input = params.get('json', '{}')\n        data = user_input\n        max_iterations = 5\n        for _ in range(max_iterations):\n            if isinstance(data, dict):\n                if 'json' in data:\n                    data = data['json']\n                    continue\n                break\n            if isinstance(data, str):\n                data = data.strip()\n                if not data or data == '{}':\n                    data = {}\n                    break\n                try:\n                    data = json.loads(data)\n                except json.JSONDecodeError:\n                    break\n            else:\n                break\n        if not isinstance(data, dict):\n            return {\n                'analysis_input': str(user_input),\n                'userId': '',\n                'success': False,\n                'message': '解析失败，已回退为原始文本'\n            }\n        user_id = data.get('userId', data.get('user_id', ''))\n        return {\n            'analysis_input': json.dumps(data, ensure_ascii=False),\n            'userId': user_id,\n            'success': True,\n            'message': '提取成功'\n        }\n    except Exception as e:\n        return {\n            'analysis_input': str(params.get('json', '')),\n            'userId': '',\n            'success': False,\n            'message': f'提取失败: {str(e)}'\n        }\n",
+        "Language": "PYTHON3"
+      },
+      "Inputs": [
+        {
+          "Name": "json",
+          "Type": "STRING",
+          "Input": {
+            "InputType": "SYSTEM_VARIABLE",
+            "SystemVariable": {
+              "Name": "SYS.UserQuery",
+              "DialogHistoryLimit": 15
+            }
+          },
+          "Desc": "",
+          "IsRequired": false,
+          "SubInputs": [],
+          "DefaultValue": "",
+          "DefaultFileName": ""
+        }
+      ],
+      "Outputs": [
+        {
+          "Title": "Output",
+          "Type": "OBJECT",
+          "Required": [],
+          "Properties": [
+            {
+              "Title": "analysis_input",
+              "Type": "STRING",
+              "Required": [],
+              "Properties": [],
+              "Desc": "",
+              "AnalysisMethod": "COVER"
+            },
+            {
+              "Title": "userId",
+              "Type": "INT",
+              "Required": [],
+              "Properties": [],
+              "Desc": "",
+              "AnalysisMethod": "COVER"
+            }
+          ],
+          "Desc": "输出内容",
+          "AnalysisMethod": "COVER"
+        }
+      ],
+      "NextNodeIDs": [
+        "45d23695-73fc-4159-b7e3-91a7636ff9b8",
+        "633da3cc-b0e1-4b2f-af28-1c28dc47ca7d",
+        "7b3d1880-b791-4829-b254-afbeb117a09f"
+      ],
+      "NodeUI": "{\"data\": {\"content\": {\"outputs\": [\"Output\", \"Output.analysis_input\", \"Output.userId\"], \"inputs\": [\"json\"], \"output\": [{\"label\": \"Output\", \"desc\": \"输出内容\", \"optionType\": \"REFERENCE_OUTPUT\", \"type\": \"OBJECT\", \"children\": [{\"id\": \"bcf86860-5c8f-4fa5-ab50-33d86fd33eae\", \"value\": \"analysis_input\", \"label\": \"analysis_input\", \"_uiId\": \"ff0e4f00-7831-4822-a1c0-55e6e66fccd0\", \"type\": \"STRING\", \"children\": []}]}]}, \"isHovering\": false, \"isParallel\": false, \"source\": true, \"target\": true, \"debug\": null, \"error\": false, \"output\": [{\"id\": \"d3b7b378-54e5-c1e3-00d9-880a12bb7abf\", \"value\": \"Output\", \"label\": \"Output\", \"_uiId\": \"50ac9901-38c7-59b1-2f1e-f4f310ef14b9\", \"type\": \"OBJECT\", \"children\": [{\"id\": \"9419db8e-d4e6-4037-a1bc-70ddc3f23872\", \"value\": \"analysis_input\", \"label\": \"analysis_input\", \"_uiId\": \"51968385-06cd-48ad-a0cc-2cfedecb9402\", \"type\": \"STRING\", \"children\": []}, {\"id\": \"bb631f16-578e-4e1a-80a3-768699fea9b7\", \"value\": \"userId\", \"label\": \"userId\", \"_uiId\": \"fcbf54b6-1172-401e-9c14-ccd01402031f\", \"type\": \"INT\", \"children\": []}]}]}, \"position\": {\"x\": -61.40952247197848, \"y\": 635.541748181832}, \"targetPosition\": \"left\", \"sourcePosition\": \"right\", \"selected\": false, \"measured\": {\"width\": 254, \"height\": 128}, \"dragging\": false}",
+      "ExceptionHandling": {
+        "Switch": "OFF",
+        "MaxRetries": "3",
+        "RetryInterval": "1",
+        "AbnormalOutputResult": "",
+        "HandleMethod": "EXCEPTION_OUTPUT",
+        "NextNodeIDs": []
+      }
+    },
+    {
+      "NodeID": "45d23695-73fc-4159-b7e3-91a7636ff9b8",
+      "NodeName": "混元大模型",
+      "NodeDesc": "",
+      "NodeType": "LLM",
+      "LLMNodeData": {
+        "ModelName": "hunyuan-2.0-instruct-20251111",
+        "Temperature": 0,
+        "TopP": 0,
+        "MaxTokens": 0,
+        "Prompt": "你是手相解读与性格倾向分析助手（仅供娱乐）。基于输入掌纹特征输出严格JSON，不要Markdown。用温和、非决定论语气，避免医疗/法律/财务建议，不断言事实。\n请用中文写作所有输出内容。\n输出字段：overview, personalityTraits, strengths, challenges, relationshipStyle, careerInclinations, selfCareTips, confidenceNotes, disclaimer。数组字段为字符串数组，disclaimer为字符串。\n输入schema：{version, lines{heart/head/life{point_count,length,curvature,start_x,start_y,end_x,end_y,span_x,span_y}}, confidences{heart/head/life}, roi{x,y,w,h}}。\n输入数据：{{analysis_input}}",
+        "SystemPrompt": "",
+        "OutputFormat": "LLM_OUTPUT_TEXT",
+        "ModelParams": {
+          "Temperature": 0.6,
+          "TopP": 0.6,
+          "MaxTokens": 4096,
+          "StopSequences": [],
+          "ReplyFormat": ""
+        }
+      },
+      "Inputs": [
+        {
+          "Name": "analysis_input",
+          "Type": "STRING",
+          "Input": {
+            "InputType": "REFERENCE_OUTPUT",
+            "Reference": {
+              "NodeID": "4c59424c-d45a-4298-85bb-287e7b849d85",
+              "JsonPath": "Output.analysis_input"
+            }
+          },
+          "Desc": "",
+          "IsRequired": false,
+          "SubInputs": [],
+          "DefaultValue": "",
+          "DefaultFileName": ""
+        }
+      ],
+      "Outputs": [
+        {
+          "Title": "Output",
+          "Type": "OBJECT",
+          "Required": [],
+          "Properties": [
+            {
+              "Title": "Content",
+              "Type": "STRING",
+              "Required": [],
+              "Properties": [],
+              "Desc": "",
+              "AnalysisMethod": "COVER"
+            },
+            {
+              "Title": "Thought",
+              "Type": "STRING",
+              "Required": [],
+              "Properties": [],
+              "Desc": "",
+              "AnalysisMethod": "COVER"
+            }
+          ],
+          "Desc": "输出内容",
+          "AnalysisMethod": "COVER"
+        }
+      ],
+      "NextNodeIDs": [
+        "b63e75ad-4dd9-43d1-a647-ebee369ecd78"
+      ],
+      "NodeUI": "{\"data\": {\"content\": \"输出：Output.Content, Output.Thought\", \"isHovering\": false, \"isParallel\": false, \"source\": true, \"target\": true, \"debug\": null, \"error\": false, \"output\": [{\"label\": \"Output\", \"desc\": \"输出内容\", \"optionType\": \"REFERENCE_OUTPUT\", \"type\": \"OBJECT\", \"children\": []}], \"displayPrompt\": \"<p>你是手相解读与性格倾向分析助手（仅供娱乐）。基于输入掌纹特征输出严格JSON，不要Markdown。用温和、非决定论语气，避免医疗/法律/财务建议，不断言事实。</p><p>请用中文写作所有输出内容。</p><p>输出字段：overview, personalityTraits, strengths, challenges, relationshipStyle, careerInclinations, selfCareTips, confidenceNotes, disclaimer。数组字段为字符串数组，disclaimer为字符串。</p><p>输入schema：{version, lines{heart/head/life{point_count,length,curvature,start_x,start_y,end_x,end_y,span_x,span_y}}, confidences{heart/head/life}, roi{x,y,w,h}}。</p><p>输入数据：{{analysis_input}}</p>\"}, \"position\": {\"x\": 353.1092845743685, \"y\": 644.4676224132467}, \"targetPosition\": \"left\", \"sourcePosition\": \"right\", \"selected\": false, \"measured\": {\"width\": 254, \"height\": 108}, \"dragging\": false}",
+      "ExceptionHandling": {
+        "Switch": "OFF",
+        "MaxRetries": "3",
+        "RetryInterval": "1",
+        "AbnormalOutputResult": "",
+        "HandleMethod": "EXCEPTION_OUTPUT",
+        "NextNodeIDs": []
+      }
+    },
+    {
+      "NodeID": "633da3cc-b0e1-4b2f-af28-1c28dc47ca7d",
+      "NodeName": "DeepSeek",
+      "NodeDesc": "",
+      "NodeType": "LLM",
+      "LLMNodeData": {
+        "ModelName": "lke-deepseek-v3.2",
+        "Temperature": 0,
+        "TopP": 0,
+        "MaxTokens": 0,
+        "Prompt": "你是手相解读与性格倾向分析助手（仅供娱乐）。基于输入掌纹特征输出严格JSON，不要Markdown。用温和、非决定论语气，避免医疗/法律/财务建议，不断言事实。\n请用中文写作所有输出内容。\n输出字段：overview, personalityTraits, strengths, challenges, relationshipStyle, careerInclinations, selfCareTips, confidenceNotes, disclaimer。数组字段为字符串数组，disclaimer为字符串。\n输入schema：{version, lines{heart/head/life{point_count,length,curvature,start_x,start_y,end_x,end_y,span_x,span_y}}, confidences{heart/head/life}, roi{x,y,w,h}}。\n输入数据：{{analysis_input}}",
+        "SystemPrompt": "",
+        "OutputFormat": "LLM_OUTPUT_TEXT",
+        "ModelParams": {
+          "Temperature": 0.6,
+          "TopP": 0.6,
+          "MaxTokens": 4096,
+          "StopSequences": [],
+          "ReplyFormat": ""
+        }
+      },
+      "Inputs": [
+        {
+          "Name": "analysis_input",
+          "Type": "STRING",
+          "Input": {
+            "InputType": "REFERENCE_OUTPUT",
+            "Reference": {
+              "NodeID": "4c59424c-d45a-4298-85bb-287e7b849d85",
+              "JsonPath": "Output.analysis_input"
+            }
+          },
+          "Desc": "",
+          "IsRequired": false,
+          "SubInputs": [],
+          "DefaultValue": "",
+          "DefaultFileName": ""
+        }
+      ],
+      "Outputs": [
+        {
+          "Title": "Output",
+          "Type": "OBJECT",
+          "Required": [],
+          "Properties": [
+            {
+              "Title": "Content",
+              "Type": "STRING",
+              "Required": [],
+              "Properties": [],
+              "Desc": "",
+              "AnalysisMethod": "COVER"
+            },
+            {
+              "Title": "Thought",
+              "Type": "STRING",
+              "Required": [],
+              "Properties": [],
+              "Desc": "",
+              "AnalysisMethod": "COVER"
+            }
+          ],
+          "Desc": "输出内容",
+          "AnalysisMethod": "COVER"
+        }
+      ],
+      "NextNodeIDs": [
+        "b63e75ad-4dd9-43d1-a647-ebee369ecd78"
+      ],
+      "NodeUI": "{\"data\": {\"content\": \"输出：Output.Content, Output.Thought\", \"isHovering\": false, \"isParallel\": false, \"source\": true, \"target\": true, \"debug\": null, \"error\": false, \"output\": [{\"label\": \"Output\", \"desc\": \"输出内容\", \"optionType\": \"REFERENCE_OUTPUT\", \"type\": \"OBJECT\", \"children\": []}], \"displayPrompt\": \"<p>你是手相解读与性格倾向分析助手（仅供娱乐）。基于输入掌纹特征输出严格JSON，不要Markdown。用温和、非决定论语气，避免医疗/法律/财务建议，不断言事实。</p><p>请用中文写作所有输出内容。</p><p>输出字段：overview, personalityTraits, strengths, challenges, relationshipStyle, careerInclinations, selfCareTips, confidenceNotes, disclaimer。数组字段为字符串数组，disclaimer为字符串。</p><p>输入schema：{version, lines{heart/head/life{point_count,length,curvature,start_x,start_y,end_x,end_y,span_x,span_y}}, confidences{heart/head/life}, roi{x,y,w,h}}。</p><p>输入数据：{{analysis_input}}</p>\"}, \"position\": {\"x\": 353.1092845743685, \"y\": 644.4676224132467}, \"targetPosition\": \"left\", \"sourcePosition\": \"right\", \"selected\": false, \"measured\": {\"width\": 254, \"height\": 108}, \"dragging\": false}",
+      "ExceptionHandling": {
+        "Switch": "OFF",
+        "MaxRetries": "3",
+        "RetryInterval": "1",
+        "AbnormalOutputResult": "",
+        "HandleMethod": "EXCEPTION_OUTPUT",
+        "NextNodeIDs": []
+      }
+    },
+    {
+      "NodeID": "7b3d1880-b791-4829-b254-afbeb117a09f",
+      "NodeName": "精调大模型",
+      "NodeDesc": "",
+      "NodeType": "LLM",
+      "LLMNodeData": {
+        "ModelName": "cs-normal-70b",
+        "Temperature": 0,
+        "TopP": 0,
+        "MaxTokens": 0,
+        "Prompt": "你是手相解读与性格倾向分析助手（仅供娱乐）。基于输入掌纹特征输出严格JSON，不要Markdown。用温和、非决定论语气，避免医疗/法律/财务建议，不断言事实。\n请用中文写作所有输出内容。\n输出字段：overview, personalityTraits, strengths, challenges, relationshipStyle, careerInclinations, selfCareTips, confidenceNotes, disclaimer。数组字段为字符串数组，disclaimer为字符串。\n输入schema：{version, lines{heart/head/life{point_count,length,curvature,start_x,start_y,end_x,end_y,span_x,span_y}}, confidences{heart/head/life}, roi{x,y,w,h}}。\n输入数据：{{analysis_input}}",
+        "SystemPrompt": "",
+        "OutputFormat": "LLM_OUTPUT_TEXT",
+        "ModelParams": {
+          "Temperature": 0.6,
+          "TopP": 0.6,
+          "MaxTokens": 4096,
+          "StopSequences": [],
+          "ReplyFormat": ""
+        }
+      },
+      "Inputs": [
+        {
+          "Name": "analysis_input",
+          "Type": "STRING",
+          "Input": {
+            "InputType": "REFERENCE_OUTPUT",
+            "Reference": {
+              "NodeID": "4c59424c-d45a-4298-85bb-287e7b849d85",
+              "JsonPath": "Output.analysis_input"
+            }
+          },
+          "Desc": "",
+          "IsRequired": false,
+          "SubInputs": [],
+          "DefaultValue": "",
+          "DefaultFileName": ""
+        }
+      ],
+      "Outputs": [
+        {
+          "Title": "Output",
+          "Type": "OBJECT",
+          "Required": [],
+          "Properties": [
+            {
+              "Title": "Content",
+              "Type": "STRING",
+              "Required": [],
+              "Properties": [],
+              "Desc": "",
+              "AnalysisMethod": "COVER"
+            },
+            {
+              "Title": "Thought",
+              "Type": "STRING",
+              "Required": [],
+              "Properties": [],
+              "Desc": "",
+              "AnalysisMethod": "COVER"
+            }
+          ],
+          "Desc": "输出内容",
+          "AnalysisMethod": "COVER"
+        }
+      ],
+      "NextNodeIDs": [
+        "b63e75ad-4dd9-43d1-a647-ebee369ecd78"
+      ],
+      "NodeUI": "{\"data\": {\"content\": \"输出：Output.Content, Output.Thought\", \"isHovering\": false, \"isParallel\": false, \"source\": true, \"target\": true, \"debug\": null, \"error\": false, \"output\": [{\"label\": \"Output\", \"desc\": \"输出内容\", \"optionType\": \"REFERENCE_OUTPUT\", \"type\": \"OBJECT\", \"children\": []}], \"displayPrompt\": \"<p>你是手相解读与性格倾向分析助手（仅供娱乐）。基于输入掌纹特征输出严格JSON，不要Markdown。用温和、非决定论语气，避免医疗/法律/财务建议，不断言事实。</p><p>请用中文写作所有输出内容。</p><p>输出字段：overview, personalityTraits, strengths, challenges, relationshipStyle, careerInclinations, selfCareTips, confidenceNotes, disclaimer。数组字段为字符串数组，disclaimer为字符串。</p><p>输入schema：{version, lines{heart/head/life{point_count,length,curvature,start_x,start_y,end_x,end_y,span_x,span_y}}, confidences{heart/head/life}, roi{x,y,w,h}}。</p><p>输入数据：{{analysis_input}}</p>\"}, \"position\": {\"x\": 353.1092845743685, \"y\": 644.4676224132467}, \"targetPosition\": \"left\", \"sourcePosition\": \"right\", \"selected\": false, \"measured\": {\"width\": 254, \"height\": 108}, \"dragging\": false}",
+      "ExceptionHandling": {
+        "Switch": "OFF",
+        "MaxRetries": "3",
+        "RetryInterval": "1",
+        "AbnormalOutputResult": "",
+        "HandleMethod": "EXCEPTION_OUTPUT",
+        "NextNodeIDs": []
+      }
+    },
+    {
+      "NodeID": "b63e75ad-4dd9-43d1-a647-ebee369ecd78",
+      "NodeName": "评级优化大模型",
+      "NodeDesc": "",
+      "NodeType": "LLM",
+      "LLMNodeData": {
+        "ModelName": "hunyuan-2.0-instruct-20251111",
+        "Temperature": 0,
+        "TopP": 0,
+        "MaxTokens": 0,
+        "Prompt": "你是手相解读与性格倾向分析助手（仅供娱乐）。基于输入掌纹特征输出严格JSON，不要Markdown。用温和、非决定论语气，避免医疗/法律/财务建议，不断言事实。\n请用中文写作所有输出内容。\n输出字段：overview, personalityTraits, strengths, challenges, relationshipStyle, careerInclinations, selfCareTips, confidenceNotes, disclaimer。数组字段为字符串数组，disclaimer为字符串。\n输入schema：{version, lines{heart/head/life{point_count,length,curvature,start_x,start_y,end_x,end_y,span_x,span_y}}, confidences{heart/head/life}, roi{x,y,w,h}}。\n输入数据：{{analysis_input}}",
+        "SystemPrompt": "",
+        "OutputFormat": "LLM_OUTPUT_TEXT",
+        "ModelParams": {
+          "Temperature": 0.6,
+          "TopP": 0.6,
+          "MaxTokens": 4096,
+          "StopSequences": [],
+          "ReplyFormat": ""
+        }
+      },
+      "Inputs": [
+        {
+          "Name": "model1",
+          "Type": "STRING",
+          "Input": {
+            "InputType": "REFERENCE_OUTPUT",
+            "Reference": {
+              "NodeID": "45d23695-73fc-4159-b7e3-91a7636ff9b8",
+              "JsonPath": "Output.Content"
+            }
+          },
+          "Desc": "",
+          "IsRequired": false,
+          "SubInputs": [],
+          "DefaultValue": "",
+          "DefaultFileName": ""
+        },
+        {
+          "Name": "model2",
+          "Type": "STRING",
+          "Input": {
+            "InputType": "REFERENCE_OUTPUT",
+            "Reference": {
+              "NodeID": "633da3cc-b0e1-4b2f-af28-1c28dc47ca7d",
+              "JsonPath": "Output.Content"
+            }
+          },
+          "Desc": "",
+          "IsRequired": false,
+          "SubInputs": [],
+          "DefaultValue": "",
+          "DefaultFileName": ""
+        },
+        {
+          "Name": "model3",
+          "Type": "STRING",
+          "Input": {
+            "InputType": "REFERENCE_OUTPUT",
+            "Reference": {
+              "NodeID": "7b3d1880-b791-4829-b254-afbeb117a09f",
+              "JsonPath": "Output.Content"
+            }
+          },
+          "Desc": "",
+          "IsRequired": false,
+          "SubInputs": [],
+          "DefaultValue": "",
+          "DefaultFileName": ""
+        }
+      ],
+      "Outputs": [
+        {
+          "Title": "Output",
+          "Type": "OBJECT",
+          "Required": [],
+          "Properties": [
+            {
+              "Title": "Content",
+              "Type": "STRING",
+              "Required": [],
+              "Properties": [],
+              "Desc": "",
+              "AnalysisMethod": "COVER"
+            },
+            {
+              "Title": "Thought",
+              "Type": "STRING",
+              "Required": [],
+              "Properties": [],
+              "Desc": "",
+              "AnalysisMethod": "COVER"
+            }
+          ],
+          "Desc": "输出内容",
+          "AnalysisMethod": "COVER"
+        }
+      ],
+      "NextNodeIDs": [
+        "5174cd11-2006-4d98-b683-cf3ca922846d"
+      ],
+      "NodeUI": "{\"data\": {\"content\": \"输出：Output.Content, Output.Thought\", \"isHovering\": false, \"isParallel\": false, \"source\": true, \"target\": true, \"debug\": null, \"error\": false, \"output\": [{\"label\": \"Output\", \"desc\": \"输出内容\", \"optionType\": \"REFERENCE_OUTPUT\", \"type\": \"OBJECT\", \"children\": []}], \"displayPrompt\": \"<p>你是手相解读与性格倾向分析助手（仅供娱乐）。基于输入掌纹特征输出严格JSON，不要Markdown。用温和、非决定论语气，避免医疗/法律/财务建议，不断言事实。</p><p>请用中文写作所有输出内容。</p><p>输出字段：overview, personalityTraits, strengths, challenges, relationshipStyle, careerInclinations, selfCareTips, confidenceNotes, disclaimer。数组字段为字符串数组，disclaimer为字符串。</p><p>输入schema：{version, lines{heart/head/life{point_count,length,curvature,start_x,start_y,end_x,end_y,span_x,span_y}}, confidences{heart/head/life}, roi{x,y,w,h}}。</p><p>输入数据：{{analysis_input}}</p>\"}, \"position\": {\"x\": 353.1092845743685, \"y\": 644.4676224132467}, \"targetPosition\": \"left\", \"sourcePosition\": \"right\", \"selected\": false, \"measured\": {\"width\": 254, \"height\": 108}, \"dragging\": false}",
+      "ExceptionHandling": {
+        "Switch": "OFF",
+        "MaxRetries": "3",
+        "RetryInterval": "1",
+        "AbnormalOutputResult": "",
+        "HandleMethod": "EXCEPTION_OUTPUT",
+        "NextNodeIDs": []
+      }
+    },
+    {
+      "NodeID": "5174cd11-2006-4d98-b683-cf3ca922846d",
+      "NodeName": "模型返回数据",
+      "NodeDesc": "",
+      "NodeType": "TOOL",
+      "ToolNodeData": {
+        "API": {
+          "URL": "http://127.0.0.1:8000/api/palm/analysis/receive",
+          "Method": "POST",
+          "authType": "NONE",
+          "KeyLocation": "HEADER",
+          "KeyParamName": "",
+          "KeyParamValue": "",
+          "CallingMethod": "NON_STREAMING"
+        },
+        "Header": [],
+        "Query": [],
+        "Body": [
+          {
+            "ParamName": "userId",
+            "ParamDesc": "",
+            "ParamType": "INT",
+            "Input": {
+              "InputType": "REFERENCE_OUTPUT",
+              "Reference": {
+                "NodeID": "4c59424c-d45a-4298-85bb-287e7b849d85",
+                "JsonPath": "Output.userId"
+              }
+            },
+            "IsRequired": true,
+            "SubParams": [],
+            "IsSecretField": false,
+            "ParamTypeOf": []
+          },
+          {
+            "ParamName": "analysisResult",
+            "ParamDesc": "",
+            "ParamType": "STRING",
+            "Input": {
+              "InputType": "REFERENCE_OUTPUT",
+              "Reference": {
+                "NodeID": "b63e75ad-4dd9-43d1-a647-ebee369ecd78",
+                "JsonPath": "Output.Content"
+              }
+            },
+            "IsRequired": true,
+            "SubParams": [],
+            "IsSecretField": false,
+            "ParamTypeOf": []
+          }
+        ],
+        "RawText": "",
+        "ToolBodyType": "JSON",
+        "Input": [],
+        "ToolOutputFormatVersion": 0
+      },
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Title": "Output",
+          "Type": "OBJECT",
+          "Required": [],
+          "Properties": [
+            {
+              "Title": "result",
+              "Type": "STRING",
+              "Required": [],
+              "Properties": [],
+              "Desc": "",
+              "AnalysisMethod": "COVER"
+            }
+          ],
+          "Desc": "输出内容",
+          "AnalysisMethod": "COVER"
+        }
+      ],
+      "NextNodeIDs": [
+        "8c15cd26-a160-45f2-912e-8094f8d2232c"
+      ],
+      "NodeUI": "{\"data\": {\"content\": {\"inputs\": [\"userId\", \"analysisResult\"], \"outputs\": [\"Output\", \"Output.result\"]}, \"isHovering\": false, \"isParallel\": false, \"source\": true, \"target\": true, \"debug\": null, \"error\": false, \"output\": [{\"id\": \"e5b12c33-ae30-441a-9578-cdf529361894\", \"value\": \"Output\", \"label\": \"Output\", \"_uiId\": \"4ad65fac-2cc3-4160-985e-0d31003bfb6a\", \"type\": \"OBJECT\", \"children\": [{\"id\": \"915f5759-0a5f-4a1f-be11-fd264a9883ae\", \"value\": \"result\", \"label\": \"result\", \"_uiId\": \"d619a96a-c81c-4d6a-b22a-a6e79c9e991f\", \"type\": \"STRING\", \"children\": []}]}]}, \"position\": {\"x\": 1500, \"y\": 650}, \"targetPosition\": \"left\", \"sourcePosition\": \"right\", \"selected\": false, \"measured\": {\"width\": 254, \"height\": 128}, \"dragging\": false}",
+      "ExceptionHandling": {
+        "Switch": "OFF",
+        "MaxRetries": "3",
+        "RetryInterval": "1",
+        "AbnormalOutputResult": "",
+        "HandleMethod": "EXCEPTION_OUTPUT",
+        "NextNodeIDs": []
+      }
+    },
+    {
+      "NodeID": "8c15cd26-a160-45f2-912e-8094f8d2232c",
+      "NodeName": "结束",
+      "NodeDesc": "",
+      "NodeType": "END",
+      "Inputs": [],
+      "Outputs": [
+        {
+          "Title": "Output",
+          "Type": "OBJECT",
+          "Required": [],
+          "Properties": [],
+          "Desc": "输出内容",
+          "AnalysisMethod": "COVER"
+        }
+      ],
+      "NextNodeIDs": [],
+      "NodeUI": "{\"data\": {\"content\": {\"outputs\": [\"Output\"], \"output\": [{\"label\": \"Output\", \"desc\": \"输出内容\", \"optionType\": \"REFERENCE_OUTPUT\", \"type\": \"OBJECT\", \"children\": []}]}, \"isHovering\": false, \"isParallel\": false, \"source\": true, \"target\": false, \"debug\": null, \"error\": false, \"output\": [{\"id\": \"c42a46a2-aeab-c8cf-2339-abc48cb2a521\", \"value\": \"Output\", \"label\": \"Output\", \"_uiId\": \"b4f6c58b-1a42-48a0-a5d8-21b5c5d641bb\", \"type\": \"OBJECT\", \"children\": []}]}, \"position\": {\"x\": 2223.0335756598097, \"y\": 594.1210581287273}, \"targetPosition\": \"left\", \"sourcePosition\": \"right\", \"selected\": false, \"measured\": {\"width\": 254, \"height\": 88}, \"dragging\": false}"
+    }
+  ],
+  "Edge": "[{\"source\": \"ea80887d-613d-4f77-9cb4-070ee1cd0db9\", \"sourceHandle\": \"ea80887d-613d-4f77-9cb4-070ee1cd0db9-source\", \"target\": \"4c59424c-d45a-4298-85bb-287e7b849d85\", \"targetHandle\": \"4c59424c-d45a-4298-85bb-287e7b849d85-target\", \"type\": \"custom\", \"data\": {\"connectedNodeIsHovering\": false, \"error\": false, \"isHovering\": false}, \"id\": \"xy-edge__ea80887d-613d-4f77-9cb4-070ee1cd0db9ea80887d-613d-4f77-9cb4-070ee1cd0db9-source-4c59424c-d45a-4298-85bb-287e7b849d854c59424c-d45a-4298-85bb-287e7b849d85-target\", \"animated\": false, \"selected\": false}, {\"source\": \"4c59424c-d45a-4298-85bb-287e7b849d85\", \"sourceHandle\": \"4c59424c-d45a-4298-85bb-287e7b849d85-source\", \"target\": \"45d23695-73fc-4159-b7e3-91a7636ff9b8\", \"targetHandle\": \"45d23695-73fc-4159-b7e3-91a7636ff9b8-target\", \"type\": \"custom\", \"data\": {\"connectedNodeIsHovering\": false, \"error\": false, \"isHovering\": false}, \"id\": \"xy-edge__4c59424c-d45a-4298-85bb-287e7b849d854c59424c-d45a-4298-85bb-287e7b849d85-source-45d23695-73fc-4159-b7e3-91a7636ff9b845d23695-73fc-4159-b7e3-91a7636ff9b8-target\", \"animated\": false, \"selected\": false}, {\"source\": \"45d23695-73fc-4159-b7e3-91a7636ff9b8\", \"sourceHandle\": \"45d23695-73fc-4159-b7e3-91a7636ff9b8-source\", \"target\": \"b63e75ad-4dd9-43d1-a647-ebee369ecd78\", \"targetHandle\": \"b63e75ad-4dd9-43d1-a647-ebee369ecd78-target\", \"type\": \"custom\", \"data\": {\"connectedNodeIsHovering\": false, \"error\": false, \"isHovering\": false}, \"id\": \"xy-edge__45d23695-73fc-4159-b7e3-91a7636ff9b845d23695-73fc-4159-b7e3-91a7636ff9b8-source-b63e75ad-4dd9-43d1-a647-ebee369ecd78b63e75ad-4dd9-43d1-a647-ebee369ecd78-target\", \"animated\": false, \"selected\": false}, {\"source\": \"4c59424c-d45a-4298-85bb-287e7b849d85\", \"sourceHandle\": \"4c59424c-d45a-4298-85bb-287e7b849d85-source\", \"target\": \"633da3cc-b0e1-4b2f-af28-1c28dc47ca7d\", \"targetHandle\": \"633da3cc-b0e1-4b2f-af28-1c28dc47ca7d-target\", \"type\": \"custom\", \"data\": {\"connectedNodeIsHovering\": false, \"error\": false, \"isHovering\": false}, \"id\": \"xy-edge__4c59424c-d45a-4298-85bb-287e7b849d854c59424c-d45a-4298-85bb-287e7b849d85-source-633da3cc-b0e1-4b2f-af28-1c28dc47ca7d633da3cc-b0e1-4b2f-af28-1c28dc47ca7d-target\", \"animated\": false, \"selected\": false}, {\"source\": \"633da3cc-b0e1-4b2f-af28-1c28dc47ca7d\", \"sourceHandle\": \"633da3cc-b0e1-4b2f-af28-1c28dc47ca7d-source\", \"target\": \"b63e75ad-4dd9-43d1-a647-ebee369ecd78\", \"targetHandle\": \"b63e75ad-4dd9-43d1-a647-ebee369ecd78-target\", \"type\": \"custom\", \"data\": {\"connectedNodeIsHovering\": false, \"error\": false, \"isHovering\": false}, \"id\": \"xy-edge__633da3cc-b0e1-4b2f-af28-1c28dc47ca7d633da3cc-b0e1-4b2f-af28-1c28dc47ca7d-source-b63e75ad-4dd9-43d1-a647-ebee369ecd78b63e75ad-4dd9-43d1-a647-ebee369ecd78-target\", \"animated\": false, \"selected\": false}, {\"source\": \"4c59424c-d45a-4298-85bb-287e7b849d85\", \"sourceHandle\": \"4c59424c-d45a-4298-85bb-287e7b849d85-source\", \"target\": \"7b3d1880-b791-4829-b254-afbeb117a09f\", \"targetHandle\": \"7b3d1880-b791-4829-b254-afbeb117a09f-target\", \"type\": \"custom\", \"data\": {\"connectedNodeIsHovering\": false, \"error\": false, \"isHovering\": false}, \"id\": \"xy-edge__4c59424c-d45a-4298-85bb-287e7b849d854c59424c-d45a-4298-85bb-287e7b849d85-source-7b3d1880-b791-4829-b254-afbeb117a09f7b3d1880-b791-4829-b254-afbeb117a09f-target\", \"animated\": false, \"selected\": false}, {\"source\": \"7b3d1880-b791-4829-b254-afbeb117a09f\", \"sourceHandle\": \"7b3d1880-b791-4829-b254-afbeb117a09f-source\", \"target\": \"b63e75ad-4dd9-43d1-a647-ebee369ecd78\", \"targetHandle\": \"b63e75ad-4dd9-43d1-a647-ebee369ecd78-target\", \"type\": \"custom\", \"data\": {\"connectedNodeIsHovering\": false, \"error\": false, \"isHovering\": false}, \"id\": \"xy-edge__7b3d1880-b791-4829-b254-afbeb117a09f7b3d1880-b791-4829-b254-afbeb117a09f-source-b63e75ad-4dd9-43d1-a647-ebee369ecd78b63e75ad-4dd9-43d1-a647-ebee369ecd78-target\", \"animated\": false, \"selected\": false}, {\"source\": \"b63e75ad-4dd9-43d1-a647-ebee369ecd78\", \"sourceHandle\": \"b63e75ad-4dd9-43d1-a647-ebee369ecd78-source\", \"target\": \"5174cd11-2006-4d98-b683-cf3ca922846d\", \"targetHandle\": \"5174cd11-2006-4d98-b683-cf3ca922846d-target\", \"type\": \"custom\", \"data\": {\"connectedNodeIsHovering\": false, \"error\": false, \"isHovering\": false}, \"id\": \"xy-edge__b63e75ad-4dd9-43d1-a647-ebee369ecd78b63e75ad-4dd9-43d1-a647-ebee369ecd78-source-5174cd11-2006-4d98-b683-cf3ca922846d5174cd11-2006-4d98-b683-cf3ca922846d-target\", \"animated\": false, \"selected\": false}, {\"source\": \"5174cd11-2006-4d98-b683-cf3ca922846d\", \"sourceHandle\": \"5174cd11-2006-4d98-b683-cf3ca922846d-source\", \"target\": \"8c15cd26-a160-45f2-912e-8094f8d2232c\", \"targetHandle\": \"8c15cd26-a160-45f2-912e-8094f8d2232c-target\", \"type\": \"custom\", \"data\": {\"connectedNodeIsHovering\": false, \"error\": false, \"isHovering\": false}, \"id\": \"xy-edge__5174cd11-2006-4d98-b683-cf3ca922846d5174cd11-2006-4d98-b683-cf3ca922846d-source-8c15cd26-a160-45f2-912e-8094f8d2232c8c15cd26-a160-45f2-912e-8094f8d2232c-target\", \"animated\": false, \"selected\": false}]",
+  "Mode": "NORMAL",
+  "ReleaseTime": ""
+}

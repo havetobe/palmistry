@@ -7,6 +7,17 @@ const metricHeart = document.getElementById("metric-heart");
 const metricHead = document.getElementById("metric-head");
 const metricLife = document.getElementById("metric-life");
 const alerts = document.getElementById("alerts");
+const analysisStatus = document.getElementById("analysis-status");
+const analysisOverview = document.getElementById("analysis-overview");
+const analysisTraits = document.getElementById("analysis-traits");
+const analysisStrengths = document.getElementById("analysis-strengths");
+const analysisChallenges = document.getElementById("analysis-challenges");
+const analysisRelationships = document.getElementById("analysis-relationships");
+const analysisCareers = document.getElementById("analysis-careers");
+const analysisSelfcare = document.getElementById("analysis-selfcare");
+const analysisConfidence = document.getElementById("analysis-confidence");
+const analysisDisclaimer = document.getElementById("analysis-disclaimer");
+const interpretButton = document.getElementById("btn-interpret");
 
 const state = {
   imageLoaded: false,
@@ -16,6 +27,7 @@ const state = {
   timeMs: 0,
   roi: null,
   source: "demo",
+  analysis: null,
   show: {
     heart: true,
     head: true,
@@ -25,6 +37,8 @@ const state = {
 
 const API_URL =
   window.PALMTRACE_API_URL || "http://127.0.0.1:8000/api/predict";
+const ANALYSIS_URL =
+  window.PALMTRACE_ANALYSIS_URL || "http://127.0.0.1:8000/api/palm/analysis";
 const DEFAULT_ROI = { x: 0.12, y: 0.12, w: 0.76, h: 0.76 };
 
 const colors = {
@@ -59,6 +73,9 @@ function resetUI() {
   metricHead.textContent = "-";
   metricLife.textContent = "-";
   alerts.innerHTML = "";
+  state.analysis = null;
+  interpretButton.disabled = true;
+  resetAnalysisUI();
   emptyState.style.display = "grid";
 }
 
@@ -151,6 +168,50 @@ function generateLines() {
   });
 
   return lines;
+}
+
+function resetAnalysisUI() {
+  analysisStatus.textContent = "尚未生成解读";
+  analysisOverview.textContent = "-";
+  analysisDisclaimer.textContent = "-";
+  [analysisTraits, analysisStrengths, analysisChallenges, analysisRelationships, analysisCareers, analysisSelfcare, analysisConfidence].forEach(
+    (list) => {
+      list.innerHTML = "";
+    }
+  );
+}
+
+function renderList(target, items) {
+  target.innerHTML = "";
+  if (!items || !items.length) {
+    const li = document.createElement("li");
+    li.textContent = "-";
+    target.appendChild(li);
+    return;
+  }
+  items.forEach((item) => {
+    const li = document.createElement("li");
+    li.textContent = item;
+    target.appendChild(li);
+  });
+}
+
+function renderAnalysis(analysis) {
+  if (!analysis) {
+    resetAnalysisUI();
+    return;
+  }
+  analysisStatus.textContent = "解读已生成";
+  analysisOverview.textContent = analysis.overview || "-";
+  renderList(analysisTraits, analysis.personalityTraits || []);
+  renderList(analysisStrengths, analysis.strengths || []);
+  renderList(analysisChallenges, analysis.challenges || []);
+  renderList(analysisRelationships, analysis.relationshipStyle || []);
+  renderList(analysisCareers, analysis.careerInclinations || []);
+  renderList(analysisSelfcare, analysis.selfCareTips || []);
+  renderList(analysisConfidence, analysis.confidenceNotes || []);
+  analysisDisclaimer.textContent =
+    analysis.disclaimer || "仅供娱乐参考，不构成任何建议。";
 }
 
 function mapToRoi(points, roi) {
@@ -367,9 +428,12 @@ function applyBackendResult(data) {
   state.warnings = data.warnings || [];
   state.roi = data.roi || DEFAULT_ROI;
   state.source = "backend";
+  state.analysis = data.analysis || null;
   if (data.base_image) {
     renderBackendImage(data.base_image);
   }
+  interpretButton.disabled = !state.lines;
+  renderAnalysis(state.analysis);
   drawOverlay();
   updateMetrics();
   updateAlerts(state.warnings);
@@ -404,6 +468,31 @@ async function requestBackend(file) {
     };
   }
   applyBackendResult(data);
+}
+
+async function requestAnalysis() {
+  if (!state.lines) {
+    analysisStatus.textContent = "请先完成掌纹识别";
+    return;
+  }
+  analysisStatus.textContent = "正在生成解读…";
+  const payload = {
+    lines: state.lines,
+    confidences: state.confidences,
+    roi: state.roi || DEFAULT_ROI,
+  };
+  const response = await fetch(ANALYSIS_URL, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  const data = await response.json();
+  if (!response.ok || !data.ok) {
+    analysisStatus.textContent = data.error || "解读生成失败";
+    return;
+  }
+  state.analysis = data.analysis || null;
+  renderAnalysis(state.analysis);
 }
 
 document.getElementById("btn-camera").addEventListener("click", () => {
@@ -441,6 +530,12 @@ document.getElementById("toggle-head").addEventListener("change", (event) => {
 document.getElementById("toggle-life").addEventListener("change", (event) => {
   state.show.life = event.target.checked;
   drawOverlay();
+});
+
+interpretButton.addEventListener("click", () => {
+  requestAnalysis().catch(() => {
+    analysisStatus.textContent = "解读请求失败，请稍后重试";
+  });
 });
 
 resetUI();
