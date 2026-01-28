@@ -9,7 +9,7 @@ from flask import Flask, jsonify, request
 from PIL import Image, ImageOps
 import torch
 
-from tools import remove_background, resize, filter_palm_lines
+from tools import remove_background, resize
 from model import UNet
 from rectification import warp
 from detection import detect
@@ -32,7 +32,8 @@ os.makedirs(RESULTS_DIR, exist_ok=True)
 
 def load_model(device: torch.device) -> UNet:
     net = UNet(n_channels=3, n_classes=1).to(device)
-    net.load_state_dict(torch.load(MODEL_PATH, map_location=device, weights_only=True))
+    net.load_state_dict(torch.load(MODEL_PATH, map_location=device))
+    net.eval()
     return net
 
 
@@ -46,10 +47,10 @@ def clamp(value: float, low: float, high: float) -> float:
 
 def line_confidence(line: List[List[int]]) -> float:
     length = len(line)
-    # Map length to a smoother confidence range without a hard 40% floor.
-    raw = length / 180.0
-    scaled = 0.2 + 0.7 * clamp(raw, 0.0, 1.0)
-    return clamp(scaled, 0.05, 0.95)
+    # Boost confidence slightly to avoid overly low percentages for typical lengths.
+    raw = length / 120.0
+    scaled = 0.55 + 0.4 * clamp(raw, 0.0, 1.0)
+    return clamp(scaled, 0.55, 0.95)
 
 
 def normalize_line(
@@ -63,7 +64,7 @@ def normalize_line(
     return points
 
 
-def preprocess_image(file_bytes: bytes, original_name: str) -> str:
+def preprocess_image(file_bytes: bytes) -> str:
     image = Image.open(io.BytesIO(file_bytes))
     image = ImageOps.exif_transpose(image).convert("RGB")
     filename = f"upload_{uuid.uuid4().hex}.png"
@@ -89,22 +90,18 @@ def run_pipeline(
         return {}, {}, ""
 
     remove_background(warped_path, warped_clean_path)
-    resize(warped_path, warped_clean_path, warped_mini_path, warped_clean_mini_path, RESIZE_VALUE)
+    resize(
+        warped_path,
+        warped_clean_path,
+        warped_mini_path,
+        warped_clean_mini_path,
+        RESIZE_VALUE,
+    )
 
     detect(MODEL, warped_clean_path, palmline_path, RESIZE_VALUE, device=DEVICE)
-    filter_palm_lines(palmline_path, warped_clean_mini_path)
-    lines = classify(palmline_path, warped_clean_mini_path)
+    lines = classify(palmline_path)
     if lines is None or len(lines) < 3 or any(line is None for line in lines):
         return {}, {}, ""
-    print(
-        "[palmtrace] line lengths:",
-        "heart=",
-        len(lines[0]),
-        "head=",
-        len(lines[1]),
-        "life=",
-        len(lines[2]),
-    )
 
     with open(warped_mini_path, "rb") as result_file:
         result_b64 = base64.b64encode(result_file.read()).decode("ascii")
@@ -144,7 +141,7 @@ def predict():
         return jsonify({"ok": False, "error": "empty filename"}), 400
 
     start = time.time()
-    input_path = preprocess_image(file.read(), file.filename)
+    input_path = preprocess_image(file.read())
 
     try:
         lines, confidences, base_image = run_pipeline(input_path)
@@ -173,6 +170,7 @@ def predict():
             "lines": lines,
             "confidences": confidences,
             "time_ms": int((time.time() - start) * 1000),
+            "warnings": [],
             "roi": {"x": 0.0, "y": 0.0, "w": 1.0, "h": 1.0},
             "base_image": base_image,
         }
