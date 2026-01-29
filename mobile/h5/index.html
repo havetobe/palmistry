@@ -26,6 +26,7 @@
         <div class="controls">
           <button class="btn primary" id="btn-camera">拍照</button>
           <button class="btn ghost" id="btn-upload">导入照片</button>
+          <button class="btn ghost" id="btn-export" disabled>导出 JSON</button>
           <button class="btn ghost" id="btn-reset">重置</button>
         </div>
         <div class="meta">
@@ -41,6 +42,19 @@
         <div class="canvas-wrap">
           <canvas id="image-canvas"></canvas>
           <canvas id="overlay-canvas"></canvas>
+          <div class="edit-toolbar" id="edit-toolbar" aria-label="校正工具栏">
+            <button class="tool-btn active" data-tool="drag" type="button">拖动</button>
+            <button class="tool-btn" data-tool="add" type="button">新增点</button>
+            <button class="tool-btn" data-tool="erase" type="button">橡皮</button>
+            <button class="tool-btn" data-tool="undo" type="button">撤销</button>
+            <button class="tool-btn" data-tool="reset-line" type="button">重置线</button>
+            <button class="tool-btn" data-tool="zoom-in" type="button">放大</button>
+            <button class="tool-btn" data-tool="zoom-out" type="button">缩小</button>
+            <div class="tool-divider"></div>
+            <button class="tool-btn active" data-line="heart" type="button">感情线</button>
+            <button class="tool-btn" data-line="head" type="button">智慧线</button>
+            <button class="tool-btn" data-line="life" type="button">生命线</button>
+          </div>
           <div class="empty-state" id="empty-state">
             <p>请拍摄或导入手掌照片</p>
             <small>建议光线均匀、掌心完整、背景简洁</small>
@@ -63,14 +77,36 @@
             <input type="checkbox" id="toggle-keypoints" checked />
             <span>掌根/虎口/掌心</span>
           </label>
+          <label class="toggle">
+            <input type="checkbox" id="toggle-edit" />
+            <span>手动校正</span>
+          </label>
         </div>
       </section>
+
+      <div class="camera-modal" id="camera-modal" aria-hidden="true">
+        <div class="camera-card">
+          <div class="camera-header">
+            <h3>相机拍照</h3>
+            <button class="tool-btn" id="btn-camera-close" type="button">关闭</button>
+          </div>
+          <div class="camera-view">
+            <video id="camera-video" autoplay playsinline></video>
+            <canvas id="camera-canvas" hidden></canvas>
+          </div>
+          <div class="camera-actions">
+            <button class="btn primary" id="btn-camera-capture" type="button">拍照</button>
+            <button class="btn ghost" id="btn-camera-switch" type="button">切换镜头</button>
+          </div>
+        </div>
+      </div>
 
       <section class="panel results-panel">
         <div class="metrics">
           <div class="metric">
             <span class="label">识别耗时</span>
             <strong id="metric-time">-</strong>
+            <span class="badge metric-badge" id="metric-handedness">-</span>
           </div>
           <div class="metric">
             <span class="label">感情线置信度</span>
@@ -91,7 +127,7 @@
       <section class="panel analysis-panel">
         <div class="analysis-header">
           <div>
-            <h2>手相解读（娱乐参考）</h2>
+            <h2>手相解读</h2>
             <p class="analysis-subtitle">
               基于心线/智慧线/生命线特征生成的非决定论解读，仅供娱乐。
             </p>
@@ -138,14 +174,6 @@
         </div>
       </section>
 
-      <section class="panel note-panel">
-        <h2>演示说明</h2>
-        <ul>
-          <li>线条为演示生成，用于展示端侧流程与可视化布局。</li>
-          <li>低光或分辨率不足会提示失败原因。</li>
-          <li>EXIF 方向会自动校正，避免横竖颠倒。</li>
-        </ul>
-      </section>
     </main>
 
     <script>

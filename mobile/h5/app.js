@@ -18,6 +18,15 @@ const analysisSelfcare = document.getElementById("analysis-selfcare");
 const analysisConfidence = document.getElementById("analysis-confidence");
 const analysisDisclaimer = document.getElementById("analysis-disclaimer");
 const interpretButton = document.getElementById("btn-interpret");
+const exportButton = document.getElementById("btn-export");
+const metricHandedness = document.getElementById("metric-handedness");
+const editToolbar = document.getElementById("edit-toolbar");
+const cameraModal = document.getElementById("camera-modal");
+const cameraVideo = document.getElementById("camera-video");
+const cameraCanvas = document.getElementById("camera-canvas");
+const cameraClose = document.getElementById("btn-camera-close");
+const cameraCapture = document.getElementById("btn-camera-capture");
+const cameraSwitch = document.getElementById("btn-camera-switch");
 
 const state = {
   imageLoaded: false,
@@ -30,6 +39,13 @@ const state = {
   source: "demo",
   analysis: null,
   baseImageLoaded: false,
+  editing: false,
+  tool: "drag",
+  activeLine: "heart",
+  zoom: 1,
+  originalLines: null,
+  history: [],
+  drag: null,
   show: {
     heart: true,
     head: true,
@@ -37,6 +53,9 @@ const state = {
     keypoints: true,
   },
 };
+
+let cameraStream = null;
+let cameraFacingMode = "environment";
 
 const API_URL =
   window.PALMTRACE_API_URL || "http://127.0.0.1:8000/api/predict";
@@ -64,6 +83,16 @@ function setCanvasSize(width, height) {
   overlayCanvas.height = height;
 }
 
+function applyCanvasTransform() {
+  const scale = clamp(state.zoom, 1, 3);
+  const origin = state.zoomOrigin || { x: 0.5, y: 0.5 };
+  const originText = `${origin.x * 100}% ${origin.y * 100}%`;
+  [imageCanvas, overlayCanvas].forEach((canvas) => {
+    canvas.style.transformOrigin = originText;
+    canvas.style.transform = scale === 1 ? "none" : `scale(${scale})`;
+  });
+}
+
 function resetUI() {
   ctx.clearRect(0, 0, imageCanvas.width, imageCanvas.height);
   overlayCtx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
@@ -76,19 +105,100 @@ function resetUI() {
   state.roi = null;
   state.source = "demo";
   state.baseImageLoaded = false;
+  state.editing = false;
+  state.tool = "drag";
+  state.activeLine = "heart";
+  state.zoom = 1;
+  state.zoomOrigin = { x: 0.5, y: 0.5 };
+  state.originalLines = null;
+  state.history = [];
   metricTime.textContent = "-";
+  metricHandedness.textContent = "-";
   metricHeart.textContent = "-";
   metricHead.textContent = "-";
   metricLife.textContent = "-";
   alerts.innerHTML = "";
   state.analysis = null;
   interpretButton.disabled = true;
+  exportButton.disabled = true;
   resetAnalysisUI();
   emptyState.style.display = "grid";
+  applyCanvasTransform();
+  updateToolUI();
+}
+
+async function openCamera() {
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    document.getElementById("file-camera").click();
+    return;
+  }
+  try {
+    cameraStream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: cameraFacingMode },
+      audio: false,
+    });
+    if (cameraVideo) {
+      cameraVideo.srcObject = cameraStream;
+    }
+    if (cameraModal) {
+      cameraModal.classList.add("show");
+      cameraModal.setAttribute("aria-hidden", "false");
+    }
+  } catch (error) {
+    document.getElementById("file-camera").click();
+  }
+}
+
+function stopCamera() {
+  if (cameraStream) {
+    cameraStream.getTracks().forEach((track) => track.stop());
+    cameraStream = null;
+  }
+  if (cameraVideo) {
+    cameraVideo.srcObject = null;
+  }
+  if (cameraModal) {
+    cameraModal.classList.remove("show");
+    cameraModal.setAttribute("aria-hidden", "true");
+  }
+}
+
+function captureFromCamera() {
+  if (!cameraVideo || !cameraCanvas) {
+    return;
+  }
+  const width = cameraVideo.videoWidth || 1280;
+  const height = cameraVideo.videoHeight || 720;
+  cameraCanvas.width = width;
+  cameraCanvas.height = height;
+  const cctx = cameraCanvas.getContext("2d");
+  cctx.drawImage(cameraVideo, 0, 0, width, height);
+  cameraCanvas.toBlob(
+    (blob) => {
+      if (!blob) {
+        return;
+      }
+      const file = new File([blob], "camera.jpg", { type: "image/jpeg" });
+      stopCamera();
+      handleFile(file);
+    },
+    "image/jpeg",
+    0.92
+  );
 }
 
 function updateMetrics() {
   metricTime.textContent = state.timeMs ? `${state.timeMs.toFixed(0)} ms` : "-";
+  if (metricHandedness) {
+    const handedness = state.keypoints && state.keypoints.handedness;
+    const label =
+      handedness === "Left"
+        ? "左手"
+        : handedness === "Right"
+        ? "右手"
+        : "-";
+    metricHandedness.textContent = label;
+  }
   metricHeart.textContent = state.confidences
     ? `${Math.round(state.confidences.heart * 100)}%`
     : "-";
@@ -236,15 +346,28 @@ function denormalize(points) {
   return points.map((pt) => [pt.x * overlayCanvas.width, pt.y * overlayCanvas.height]);
 }
 
+function getScale() {
+  const minSide = Math.min(overlayCanvas.width, overlayCanvas.height);
+  return {
+    lineWidth: clamp(minSide * 0.006, 2, 10),
+    dashSize: clamp(minSide * 0.015, 6, 18),
+    dashGap: clamp(minSide * 0.012, 4, 14),
+    pointRadius: clamp(minSide * 0.01, 6, 18),
+    crossSize: clamp(minSide * 0.015, 8, 22),
+    fontSize: clamp(minSide * 0.015, 10, 16),
+  };
+}
+
 function drawPolyline(points, color, dashed) {
   const absolutePoints = denormalize(points);
+  const scale = getScale();
   overlayCtx.save();
   overlayCtx.strokeStyle = color;
-  overlayCtx.lineWidth = 4;
+  overlayCtx.lineWidth = scale.lineWidth;
   overlayCtx.lineJoin = "round";
   overlayCtx.lineCap = "round";
   if (dashed) {
-    overlayCtx.setLineDash([10, 8]);
+    overlayCtx.setLineDash([scale.dashSize, scale.dashGap]);
   } else {
     overlayCtx.setLineDash([]);
   }
@@ -260,6 +383,44 @@ function drawPolyline(points, color, dashed) {
   overlayCtx.restore();
 }
 
+function drawHandles(points, color) {
+  const scale = getScale();
+  const radius = state.editing
+    ? Math.max(4, scale.pointRadius * 0.9)
+    : Math.max(2, scale.pointRadius * 0.4);
+  overlayCtx.save();
+  overlayCtx.fillStyle = color;
+  points.forEach((pt) => {
+    const x = pt.x * overlayCanvas.width;
+    const y = pt.y * overlayCanvas.height;
+    overlayCtx.beginPath();
+    overlayCtx.arc(x, y, radius, 0, Math.PI * 2);
+    overlayCtx.fill();
+  });
+  overlayCtx.restore();
+}
+
+function cloneLines(lines) {
+  if (!lines) {
+    return null;
+  }
+  return {
+    heart: (lines.heart || []).map((pt) => ({ x: pt.x, y: pt.y })),
+    head: (lines.head || []).map((pt) => ({ x: pt.x, y: pt.y })),
+    life: (lines.life || []).map((pt) => ({ x: pt.x, y: pt.y })),
+  };
+}
+
+function pushHistory() {
+  if (!state.lines) {
+    return;
+  }
+  state.history.push(cloneLines(state.lines));
+  if (state.history.length > 20) {
+    state.history.shift();
+  }
+}
+
 function drawKeypoints(keypoints) {
   if (!keypoints) {
     return;
@@ -267,6 +428,9 @@ function drawKeypoints(keypoints) {
   const width = overlayCanvas.width;
   const height = overlayCanvas.height;
   const flipped = Boolean(keypoints.flipped);
+  const scale = getScale();
+  const pointRadius = scale.pointRadius;
+  const crossSize = scale.crossSize;
   const items = [
     { key: "palm_root", label: "掌根", color: colors.palmRoot },
     { key: "tiger_mouth", label: "虎口", color: colors.tigerMouth },
@@ -274,8 +438,8 @@ function drawKeypoints(keypoints) {
   ];
 
   overlayCtx.save();
-  overlayCtx.lineWidth = 2;
-  overlayCtx.font = "12px serif";
+  overlayCtx.lineWidth = Math.max(2, pointRadius / 4);
+  overlayCtx.font = `${scale.fontSize}px serif`;
   items.forEach((item) => {
     const pt = keypoints[item.key];
     if (!pt) {
@@ -289,13 +453,13 @@ function drawKeypoints(keypoints) {
     overlayCtx.fillStyle = item.color;
     overlayCtx.strokeStyle = item.color;
     overlayCtx.beginPath();
-    overlayCtx.arc(x, y, 6, 0, Math.PI * 2);
+    overlayCtx.arc(x, y, pointRadius, 0, Math.PI * 2);
     overlayCtx.fill();
     overlayCtx.beginPath();
-    overlayCtx.moveTo(x - 8, y);
-    overlayCtx.lineTo(x + 8, y);
-    overlayCtx.moveTo(x, y - 8);
-    overlayCtx.lineTo(x, y + 8);
+    overlayCtx.moveTo(x - crossSize, y);
+    overlayCtx.lineTo(x + crossSize, y);
+    overlayCtx.moveTo(x, y - crossSize);
+    overlayCtx.lineTo(x, y + crossSize);
     overlayCtx.stroke();
     overlayCtx.fillText(item.label, x + 10, y - 8);
   });
@@ -324,17 +488,152 @@ function drawOverlay() {
   overlayCtx.restore();
 
   if (state.show.heart) {
-    drawPolyline(mapToRoi(state.lines.heart, roi), colors.heart, false);
+    const pts = mapToRoi(state.lines.heart, roi);
+    drawPolyline(pts, colors.heart, false);
+    if (state.editing) {
+      drawHandles(pts, colors.heart);
+    }
   }
   if (state.show.head) {
-    drawPolyline(mapToRoi(state.lines.head, roi), colors.head, true);
+    const pts = mapToRoi(state.lines.head, roi);
+    drawPolyline(pts, colors.head, true);
+    if (state.editing) {
+      drawHandles(pts, colors.head);
+    }
   }
   if (state.show.life) {
-    drawPolyline(mapToRoi(state.lines.life, roi), colors.life, false);
+    const pts = mapToRoi(state.lines.life, roi);
+    drawPolyline(pts, colors.life, false);
+    if (state.editing) {
+      drawHandles(pts, colors.life);
+    }
   }
   if (state.show.keypoints) {
     drawKeypoints(state.keypoints);
   }
+}
+
+function getPointerPosition(event) {
+  const rect = overlayCanvas.getBoundingClientRect();
+  const cssX = event.clientX - rect.left;
+  const cssY = event.clientY - rect.top;
+  const scale = clamp(state.zoom, 1, 3);
+  const baseCssW = rect.width / scale;
+  const baseCssH = rect.height / scale;
+  const origin = state.zoomOrigin || { x: 0.5, y: 0.5 };
+  const ox = baseCssW * origin.x;
+  const oy = baseCssH * origin.y;
+  const oxScaled = ox * scale;
+  const oyScaled = oy * scale;
+  const unscaledCssX = ox + (cssX - oxScaled) / scale;
+  const unscaledCssY = oy + (cssY - oyScaled) / scale;
+  const x = unscaledCssX * (overlayCanvas.width / baseCssW);
+  const y = unscaledCssY * (overlayCanvas.height / baseCssH);
+  return { x, y };
+}
+
+function findNearestPoint(px, py) {
+  if (!state.lines) {
+    return null;
+  }
+  const roi = state.roi || DEFAULT_ROI;
+  const scale = getScale();
+  const threshold = state.editing
+    ? Math.max(14, scale.pointRadius * 1.8)
+    : Math.max(8, scale.pointRadius * 1.2);
+  const candidates = [];
+  const lineOrder = [
+    { key: "heart", enabled: state.show.heart },
+    { key: "head", enabled: state.show.head },
+    { key: "life", enabled: state.show.life },
+  ];
+  lineOrder.forEach((line) => {
+    if (!line.enabled || !state.lines[line.key]) {
+      return;
+    }
+    const pts = mapToRoi(state.lines[line.key], roi);
+    pts.forEach((pt, idx) => {
+      const x = pt.x * overlayCanvas.width;
+      const y = pt.y * overlayCanvas.height;
+      const dx = x - px;
+      const dy = y - py;
+      const dist = Math.hypot(dx, dy);
+      if (dist <= threshold) {
+        candidates.push({ key: line.key, idx, dist });
+      }
+    });
+  });
+  if (!candidates.length) {
+    return null;
+  }
+  candidates.sort((a, b) => a.dist - b.dist);
+  return candidates[0];
+}
+
+function updatePointFromPointer(lineKey, idx, px, py) {
+  const roi = state.roi || DEFAULT_ROI;
+  const nx = px / overlayCanvas.width;
+  const ny = py / overlayCanvas.height;
+  const x = clamp((nx - roi.x) / roi.w, 0, 1);
+  const y = clamp((ny - roi.y) / roi.h, 0, 1);
+  const line = state.lines && state.lines[lineKey];
+  if (!line || !line[idx]) {
+    return;
+  }
+  line[idx] = { x, y };
+}
+
+function insertPoint(lineKey, px, py) {
+  const roi = state.roi || DEFAULT_ROI;
+  const line = state.lines && state.lines[lineKey];
+  if (!line || line.length < 2) {
+    return;
+  }
+  const nx = px / overlayCanvas.width;
+  const ny = py / overlayCanvas.height;
+  const x = clamp((nx - roi.x) / roi.w, 0, 1);
+  const y = clamp((ny - roi.y) / roi.h, 0, 1);
+  const pts = mapToRoi(line, roi);
+  let bestIndex = 0;
+  let bestDist = Infinity;
+  for (let i = 0; i < pts.length - 1; i += 1) {
+    const ax = pts[i].x * overlayCanvas.width;
+    const ay = pts[i].y * overlayCanvas.height;
+    const bx = pts[i + 1].x * overlayCanvas.width;
+    const by = pts[i + 1].y * overlayCanvas.height;
+    const dx = bx - ax;
+    const dy = by - ay;
+    const len2 = dx * dx + dy * dy || 1;
+    const t = Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / len2));
+    const projX = ax + t * dx;
+    const projY = ay + t * dy;
+    const dist = Math.hypot(px - projX, py - projY);
+    if (dist < bestDist) {
+      bestDist = dist;
+      bestIndex = i + 1;
+    }
+  }
+  line.splice(bestIndex, 0, { x, y });
+}
+
+function updateToolUI() {
+  if (!editToolbar) {
+    return;
+  }
+  editToolbar.classList.toggle("show", state.editing);
+  editToolbar.querySelectorAll(".tool-btn").forEach((btn) => {
+    if (btn.dataset.tool) {
+      btn.classList.toggle("active", btn.dataset.tool === state.tool);
+    }
+    if (btn.dataset.line) {
+      btn.classList.toggle("active", btn.dataset.line === state.activeLine);
+    }
+  });
+  if (!state.editing) {
+    overlayCanvas.style.cursor = "default";
+    return;
+  }
+  overlayCanvas.style.cursor = state.tool === "erase" ? "not-allowed" : "grab";
 }
 
 function analyzeImage(fallbackReason) {
@@ -363,108 +662,29 @@ function analyzeImage(fallbackReason) {
   updateAlerts(warnings);
 }
 
-function getExifOrientation(buffer) {
-  const view = new DataView(buffer);
-  if (view.getUint16(0, false) !== 0xffd8) {
-    return 1;
-  }
-  let offset = 2;
-  const length = view.byteLength;
-  while (offset < length) {
-    const marker = view.getUint16(offset, false);
-    offset += 2;
-    if (marker === 0xffe1) {
-      const exifLength = view.getUint16(offset, false);
-      offset += 2;
-      if (view.getUint32(offset, false) !== 0x45786966) {
-        break;
-      }
-      offset += 6;
-      const little = view.getUint16(offset, false) === 0x4949;
-      offset += view.getUint32(offset + 4, little);
-      const tags = view.getUint16(offset, little);
-      offset += 2;
-      for (let i = 0; i < tags; i += 1) {
-        const tagOffset = offset + i * 12;
-        if (view.getUint16(tagOffset, little) === 0x0112) {
-          return view.getUint16(tagOffset + 8, little);
-        }
-      }
-      break;
-    } else if ((marker & 0xff00) !== 0xff00) {
-      break;
-    } else {
-      offset += view.getUint16(offset, false);
-    }
-  }
-  return 1;
-}
-
-function drawImageWithOrientation(img, orientation) {
-  const width = img.naturalWidth;
-  const height = img.naturalHeight;
-  const rotate = [5, 6, 7, 8].includes(orientation);
-  setCanvasSize(rotate ? height : width, rotate ? width : height);
-
-  ctx.save();
-  switch (orientation) {
-    case 2:
-      ctx.translate(width, 0);
-      ctx.scale(-1, 1);
-      break;
-    case 3:
-      ctx.translate(width, height);
-      ctx.rotate(Math.PI);
-      break;
-    case 4:
-      ctx.translate(0, height);
-      ctx.scale(1, -1);
-      break;
-    case 5:
-      ctx.rotate(0.5 * Math.PI);
-      ctx.scale(1, -1);
-      break;
-    case 6:
-      ctx.rotate(0.5 * Math.PI);
-      ctx.translate(0, -height);
-      break;
-    case 7:
-      ctx.rotate(0.5 * Math.PI);
-      ctx.translate(width, -height);
-      ctx.scale(-1, 1);
-      break;
-    case 8:
-      ctx.rotate(-0.5 * Math.PI);
-      ctx.translate(-width, 0);
-      break;
-    default:
-      break;
-  }
-  ctx.drawImage(img, 0, 0);
-  ctx.restore();
-}
-
 function handleFile(file) {
   if (!file) {
     return;
   }
   const reader = new FileReader();
   reader.onload = () => {
-    const buffer = reader.result;
-    const orientation = getExifOrientation(buffer);
     const img = new Image();
     img.onload = () => {
-      drawImageWithOrientation(img, orientation);
+      setCanvasSize(img.naturalWidth, img.naturalHeight);
+      ctx.clearRect(0, 0, imageCanvas.width, imageCanvas.height);
+      ctx.drawImage(img, 0, 0);
+      applyCanvasTransform();
       state.imageLoaded = true;
       emptyState.style.display = "none";
       requestBackend(file).catch((error) => {
         state.lines = null;
         state.confidences = null;
         state.timeMs = (error && error.timeMs) || 0;
-        state.warnings = [
+        const baseMessage =
           (error && error.message) ||
-            "Backend unavailable. Start api_server.py and retry.",
-        ];
+          "Backend unavailable. Start api_server.py and retry.";
+        const suggestions = (error && error.suggestions) || [];
+        state.warnings = [baseMessage, ...suggestions];
         state.source = "backend";
         drawOverlay();
         updateMetrics();
@@ -479,6 +699,8 @@ function handleFile(file) {
 
 function applyBackendResult(data) {
   state.lines = data.lines || null;
+  state.originalLines = cloneLines(state.lines);
+  state.history = [];
   state.keypoints = data.keypoints || null;
   state.confidences = data.confidences || null;
   state.timeMs = data.time_ms || 0;
@@ -492,7 +714,9 @@ function applyBackendResult(data) {
   } else {
     state.baseImageLoaded = true;
   }
+  updateToolUI();
   interpretButton.disabled = !state.lines;
+  exportButton.disabled = !state.lines;
   renderAnalysis(state.analysis);
   drawOverlay();
   updateMetrics();
@@ -507,6 +731,7 @@ function renderBackendImage(dataUrl) {
     ctx.drawImage(img, 0, 0);
     overlayCtx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
     state.baseImageLoaded = true;
+    applyCanvasTransform();
     // Repaint overlays after backend image replaces the base canvas.
     drawOverlay();
   };
@@ -525,6 +750,7 @@ async function requestBackend(file) {
     throw {
       kind: "backend",
       message: data.error || "模型识别失败。",
+      suggestions: data.suggestions || [],
       timeMs: data.time_ms,
     };
   }
@@ -557,7 +783,7 @@ async function requestAnalysis() {
 }
 
 document.getElementById("btn-camera").addEventListener("click", () => {
-  document.getElementById("file-camera").click();
+  openCamera();
 });
 
 document.getElementById("btn-upload").addEventListener("click", () => {
@@ -566,6 +792,29 @@ document.getElementById("btn-upload").addEventListener("click", () => {
 
 document.getElementById("btn-reset").addEventListener("click", () => {
   resetUI();
+});
+
+exportButton.addEventListener("click", () => {
+  if (!state.lines) {
+    return;
+  }
+  const payload = {
+    version: 1,
+    generated_at: new Date().toISOString(),
+    roi: state.roi || DEFAULT_ROI,
+    lines: state.lines,
+    confidences: state.confidences,
+    keypoints: state.keypoints,
+  };
+  const blob = new Blob([JSON.stringify(payload, null, 2)], {
+    type: "application/json",
+  });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "palm_result.json";
+  a.click();
+  URL.revokeObjectURL(url);
 });
 
 document.getElementById("file-camera").addEventListener("change", (event) => {
@@ -596,6 +845,154 @@ document.getElementById("toggle-life").addEventListener("change", (event) => {
 document.getElementById("toggle-keypoints").addEventListener("change", (event) => {
   state.show.keypoints = event.target.checked;
   drawOverlay();
+});
+
+if (cameraClose) {
+  cameraClose.addEventListener("click", () => {
+    stopCamera();
+  });
+}
+
+if (cameraCapture) {
+  cameraCapture.addEventListener("click", () => {
+    captureFromCamera();
+  });
+}
+
+if (cameraSwitch) {
+  cameraSwitch.addEventListener("click", async () => {
+    cameraFacingMode = cameraFacingMode === "environment" ? "user" : "environment";
+    stopCamera();
+    await openCamera();
+  });
+}
+
+document.getElementById("toggle-edit").addEventListener("change", (event) => {
+  state.editing = event.target.checked;
+  state.drag = null;
+  overlayCanvas.style.touchAction = state.editing ? "none" : "auto";
+  overlayCanvas.style.cursor = state.editing ? "grab" : "default";
+  state.zoom = state.editing ? state.zoom : 1;
+  state.zoomOrigin = { x: 0.5, y: 0.5 };
+  updateToolUI();
+  applyCanvasTransform();
+  drawOverlay();
+});
+
+if (editToolbar) {
+  editToolbar.addEventListener("click", (event) => {
+    const button = event.target.closest(".tool-btn");
+    if (!button) {
+      return;
+    }
+    if (button.dataset.line) {
+      state.activeLine = button.dataset.line;
+      updateToolUI();
+      return;
+    }
+    const tool = button.dataset.tool;
+    if (!tool) {
+      return;
+    }
+    if (tool === "undo") {
+      const previous = state.history.pop();
+      if (previous) {
+        state.lines = previous;
+      }
+      drawOverlay();
+      return;
+    }
+    if (tool === "reset-line") {
+      if (state.originalLines && state.lines) {
+        pushHistory();
+        state.lines[state.activeLine] = (state.originalLines[state.activeLine] || []).map(
+          (pt) => ({ x: pt.x, y: pt.y })
+        );
+        drawOverlay();
+      }
+      return;
+    }
+    if (tool === "zoom-in") {
+      state.zoom = clamp(state.zoom + 0.2, 1, 3);
+      applyCanvasTransform();
+      return;
+    }
+    if (tool === "zoom-out") {
+      state.zoom = clamp(state.zoom - 0.2, 1, 3);
+      applyCanvasTransform();
+      return;
+    }
+    state.tool = tool;
+    updateToolUI();
+  });
+}
+
+overlayCanvas.addEventListener("pointerdown", (event) => {
+  if (!state.editing) {
+    return;
+  }
+  const { x, y } = getPointerPosition(event);
+  if (state.tool === "add") {
+    if (!state.lines) {
+      return;
+    }
+    pushHistory();
+    insertPoint(state.activeLine, x, y);
+    drawOverlay();
+    return;
+  }
+  const hit = findNearestPoint(x, y);
+  if (!hit) {
+    return;
+  }
+  if (state.tool === "erase") {
+    const line = state.lines && state.lines[hit.key];
+    if (line && line.length > 2) {
+      pushHistory();
+      line.splice(hit.idx, 1);
+    }
+    drawOverlay();
+    return;
+  }
+  overlayCanvas.setPointerCapture(event.pointerId);
+  pushHistory();
+  state.drag = { key: hit.key, idx: hit.idx };
+  updatePointFromPointer(hit.key, hit.idx, x, y);
+  drawOverlay();
+});
+
+overlayCanvas.addEventListener("pointermove", (event) => {
+  if (!state.editing || !state.drag) {
+    return;
+  }
+  const { x, y } = getPointerPosition(event);
+  updatePointFromPointer(state.drag.key, state.drag.idx, x, y);
+  drawOverlay();
+});
+
+overlayCanvas.addEventListener("pointerup", (event) => {
+  if (state.drag) {
+    overlayCanvas.releasePointerCapture(event.pointerId);
+  }
+  state.drag = null;
+});
+
+overlayCanvas.addEventListener("pointerleave", () => {
+  state.drag = null;
+});
+
+overlayCanvas.addEventListener("wheel", (event) => {
+  if (!state.editing) {
+    return;
+  }
+  event.preventDefault();
+  const rect = overlayCanvas.getBoundingClientRect();
+  const ox = (event.clientX - rect.left) / rect.width;
+  const oy = (event.clientY - rect.top) / rect.height;
+  state.zoomOrigin = { x: clamp(ox, 0, 1), y: clamp(oy, 0, 1) };
+  const delta = event.deltaY > 0 ? -0.15 : 0.15;
+  state.zoom = clamp(state.zoom + delta, 1, 3);
+  applyCanvasTransform();
 });
 
 interpretButton.addEventListener("click", () => {

@@ -166,7 +166,7 @@ def annotate_keypoints_on_image(path_to_image, keypoints):
         return
     im = Image.open(path_to_image)
     draw = ImageDraw.Draw(im)
-    r = 10
+    r = 16
     colors = {
         "掌根": (255, 69, 0),   # orange-red
         "虎口": (0, 191, 255),  # deep sky blue
@@ -189,9 +189,9 @@ def annotate_keypoints_on_image(path_to_image, keypoints):
         x, y = pt[0] * scale_x, pt[1] * scale_y
         if flipped:
             x = img_w - x
-        draw.ellipse((x - r, y - r, x + r, y + r), fill=color, outline=color, width=2)
-        draw.line((x - r, y, x + r, y), fill=color, width=2)
-        draw.line((x, y - r, x, y + r), fill=color, width=2)
+        draw.ellipse((x - r, y - r, x + r, y + r), fill=color, outline=color, width=3)
+        draw.line((x - r, y, x + r, y), fill=color, width=3)
+        draw.line((x, y - r, x, y + r), fill=color, width=3)
         draw.text((x + r + 4, y - r - 6), label, fill=color)
 
     # Overlay MediaPipe 21 landmark indices for precise tuning.

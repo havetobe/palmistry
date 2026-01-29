@@ -192,7 +192,57 @@ canvas {
 #overlay-canvas {
   position: absolute;
   inset: 0;
-  pointer-events: none;
+  pointer-events: auto;
+}
+
+.edit-toolbar {
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: none;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.9);
+  border: 1px solid rgba(31, 26, 22, 0.15);
+  box-shadow: 0 10px 24px rgba(31, 26, 22, 0.1);
+  z-index: 2;
+  max-height: 80%;
+  overflow: auto;
+}
+
+.edit-toolbar.show {
+  display: flex;
+}
+
+.tool-btn {
+  border: 1px solid var(--stroke);
+  background: #fff6ee;
+  color: var(--ink);
+  border-radius: 10px;
+  padding: 8px 12px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.tool-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 12px rgba(31, 26, 22, 0.08);
+}
+
+.tool-btn.active {
+  background: var(--ink);
+  color: #fffaf4;
+  border-color: transparent;
+}
+
+.tool-divider {
+  height: 1px;
+  background: rgba(31, 26, 22, 0.12);
+  margin: 4px 0;
 }
 
 .empty-state {
@@ -342,6 +392,13 @@ canvas {
   font-size: 18px;
 }
 
+.metric-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-left: 6px;
+}
+
 .alerts {
   display: grid;
   gap: 8px;
@@ -379,6 +436,64 @@ canvas {
   gap: 8px;
 }
 
+.camera-modal {
+  position: fixed;
+  inset: 0;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  background: rgba(31, 26, 22, 0.5);
+  z-index: 10;
+}
+
+.camera-modal.show {
+  display: flex;
+}
+
+.camera-card {
+  width: min(92vw, 520px);
+  background: #fffaf4;
+  border-radius: 18px;
+  border: 1px solid rgba(31, 26, 22, 0.15);
+  box-shadow: 0 20px 50px rgba(31, 26, 22, 0.25);
+  padding: 16px;
+  display: grid;
+  gap: 12px;
+}
+
+.camera-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.camera-header h3 {
+  margin: 0;
+  font-size: 16px;
+}
+
+.camera-view {
+  position: relative;
+  border-radius: 14px;
+  background: #1f1a16;
+  overflow: hidden;
+  aspect-ratio: 3 / 4;
+}
+
+#camera-video {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: cover;
+}
+
+.camera-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+}
+
 @keyframes lift-in {
   from {
     opacity: 0;
@@ -413,5 +528,9 @@ canvas {
   .input-panel {
     flex-direction: column;
     align-items: flex-start;
+  }
+
+  .canvas-wrap {
+    min-height: 0;
   }
 }
