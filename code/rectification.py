@@ -5,6 +5,7 @@ import mediapipe as mp
 # code reference: https://google.github.io/mediapipe/solutions/hands.html
 
 WARP_SUCCESS = 1
+EDGE_MARGIN = 0.02
 
 def warp_image(path_to_image, path_to_warped_image):
         # 7 landmark points (normalized)
@@ -41,6 +42,10 @@ def warp_image(path_to_image, path_to_warped_image):
             return None
         else:
             hand_landmarks = results.multi_hand_landmarks[0]
+            xs = [lm.x for lm in hand_landmarks.landmark]
+            ys = [lm.y for lm in hand_landmarks.landmark]
+            if min(xs) < EDGE_MARGIN or max(xs) > 1 - EDGE_MARGIN or min(ys) < EDGE_MARGIN or max(ys) > 1 - EDGE_MARGIN:
+                return None
             # 2. Align images
             pts = np.float32([[hand_landmarks.landmark[i].x*image_width,
                             hand_landmarks.landmark[i].y*image_height] for i in pts_index])

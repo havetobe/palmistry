@@ -13,7 +13,7 @@ from flask import Flask, jsonify, request
 from PIL import Image, ImageOps
 import torch
 
-from tools import remove_background, resize
+from tools import remove_background, resize, extract_semantic_keypoints
 from model import UNet
 from rectification import warp
 from detection import detect
@@ -310,6 +310,9 @@ def call_palm_assistant(summary: Dict[str, object], user_id: str) -> Dict[str, o
 def preprocess_image(file_bytes: bytes) -> str:
     image = Image.open(io.BytesIO(file_bytes))
     image = ImageOps.exif_transpose(image).convert("RGB")
+    pad = int(min(image.size) * 0.12)
+    if pad > 0:
+        image = ImageOps.expand(image, border=pad, fill=(12, 12, 12))
     filename = f"upload_{uuid.uuid4().hex}.png"
     input_path = os.path.join(INPUT_DIR, filename)
     image.save(input_path, "PNG")
@@ -318,7 +321,7 @@ def preprocess_image(file_bytes: bytes) -> str:
 
 def run_pipeline(
     input_path: str,
-) -> Tuple[Dict[str, List[Dict[str, float]]], Dict[str, float], str]:
+) -> Tuple[Dict[str, List[Dict[str, float]]], Dict[str, float], str, Dict[str, object]]:
     clean_path = os.path.join(RESULTS_DIR, "palm_without_background.jpg")
     warped_path = os.path.join(RESULTS_DIR, "warped_palm.jpg")
     warped_clean_path = os.path.join(RESULTS_DIR, "warped_palm_clean.jpg")
@@ -330,7 +333,7 @@ def run_pipeline(
 
     warp_result = warp(input_path, warped_path)
     if warp_result is None:
-        return {}, {}, ""
+        return {}, {}, "", {}
 
     remove_background(warped_path, warped_clean_path)
     resize(
@@ -342,9 +345,10 @@ def run_pipeline(
     )
 
     detect(MODEL, warped_clean_path, palmline_path, RESIZE_VALUE, device=DEVICE)
+    keypoints_payload = build_keypoints_payload(warped_mini_path)
     lines = classify(palmline_path)
     if lines is None or len(lines) < 3 or any(line is None for line in lines):
-        return {}, {}, ""
+        return {}, {}, "", {}
 
     with open(warped_mini_path, "rb") as result_file:
         result_b64 = base64.b64encode(result_file.read()).decode("ascii")
@@ -360,7 +364,31 @@ def run_pipeline(
         "head": line_confidence(lines[1]),
         "life": line_confidence(lines[2]),
     }
-    return output_lines, confidences, result_data_url
+    return output_lines, confidences, result_data_url, keypoints_payload
+
+
+def normalize_point(point: List[float], width: int, height: int) -> Dict[str, float]:
+    return {"x": point[0] / width, "y": point[1] / height}
+
+
+def build_keypoints_payload(path_to_image: str) -> Dict[str, object]:
+    keypoints = extract_semantic_keypoints(path_to_image)
+    if not keypoints:
+        return {}
+    image_width, image_height = keypoints.get("image_size", [0, 0])
+    if not image_width or not image_height:
+        return {}
+    return {
+        "palm_root": normalize_point(keypoints["palm_root"], image_width, image_height),
+        "tiger_mouth": normalize_point(
+            keypoints["tiger_mouth"], image_width, image_height
+        ),
+        "palm_center": normalize_point(
+            keypoints["palm_center"], image_width, image_height
+        ),
+        "flipped": bool(keypoints.get("flipped")),
+        "handedness": keypoints.get("handedness", ""),
+    }
 
 
 def run_palm_analysis(
@@ -407,7 +435,7 @@ def predict():
     input_path = preprocess_image(file.read())
 
     try:
-        lines, confidences, base_image = run_pipeline(input_path)
+        lines, confidences, base_image, keypoints = run_pipeline(input_path)
     except Exception as exc:
         APP.logger.exception("Pipeline failed")
         return (
@@ -435,6 +463,7 @@ def predict():
         "warnings": [],
         "roi": {"x": 0.0, "y": 0.0, "w": 1.0, "h": 1.0},
         "base_image": base_image,
+        "keypoints": keypoints,
     }
     with_analysis = (request.form.get("analysis") or request.args.get("analysis") or "").lower()
     if with_analysis in {"1", "true", "yes"}:
@@ -458,6 +487,7 @@ def palm_analysis():
     confidences: Dict[str, float] = {}
     roi = {"x": 0.0, "y": 0.0, "w": 1.0, "h": 1.0}
     base_image = ""
+    keypoints: Dict[str, object] = {}
 
     if "image" in request.files:
         file = request.files["image"]
@@ -465,7 +495,7 @@ def palm_analysis():
             return jsonify({"ok": False, "error": "empty filename"}), 400
         input_path = preprocess_image(file.read())
         try:
-            lines, confidences, base_image = run_pipeline(input_path)
+            lines, confidences, base_image, keypoints = run_pipeline(input_path)
         except Exception as exc:
             APP.logger.exception("Pipeline failed")
             return (
@@ -505,6 +535,7 @@ def palm_analysis():
             "confidences": confidences,
             "roi": roi,
             "base_image": base_image,
+            "keypoints": keypoints,
             "time_ms": int((time.time() - start) * 1000),
         }
     )

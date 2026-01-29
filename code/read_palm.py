@@ -22,6 +22,7 @@ def main(input):
     path_to_palmline_image = 'results/palm_lines.png'
     path_to_model = 'checkpoint/checkpoint_aug_epoch70.pth'
     path_to_result = 'results/result.jpg'
+    path_to_keypoints = 'results/keypoints.json'
 
     # 0. Preprocess image
     remove_background(path_to_input_image, path_to_clean_image)
@@ -33,6 +34,9 @@ def main(input):
     else:
         remove_background(path_to_warped_image, path_to_warped_image_clean)
         resize(path_to_warped_image, path_to_warped_image_clean, path_to_warped_image_mini, path_to_warped_image_clean_mini, resize_value)
+
+        keypoints = extract_semantic_keypoints(path_to_warped_image)
+        save_keypoints(keypoints, path_to_keypoints)
 
         # 2. Principal line detection
         net = UNet(n_channels=3, n_classes=1)
@@ -47,6 +51,7 @@ def main(input):
 
         # 5. Save result
         save_result(im, contents, resize_value, path_to_result)
+        annotate_keypoints_on_image(path_to_result, keypoints)
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()

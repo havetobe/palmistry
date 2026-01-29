@@ -22,16 +22,19 @@ const interpretButton = document.getElementById("btn-interpret");
 const state = {
   imageLoaded: false,
   lines: null,
+  keypoints: null,
   confidences: null,
   warnings: [],
   timeMs: 0,
   roi: null,
   source: "demo",
   analysis: null,
+  baseImageLoaded: false,
   show: {
     heart: true,
     head: true,
     life: true,
+    keypoints: true,
   },
 };
 
@@ -46,6 +49,9 @@ const colors = {
   head: "#2b8fb3",
   life: "#efc45d",
   roi: "rgba(31, 26, 22, 0.15)",
+  palmRoot: "#f06543",
+  tigerMouth: "#2b8fb3",
+  palmCenter: "#2fbf71",
 };
 
 const ctx = imageCanvas.getContext("2d");
@@ -63,11 +69,13 @@ function resetUI() {
   overlayCtx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
   state.imageLoaded = false;
   state.lines = null;
+  state.keypoints = null;
   state.confidences = null;
   state.warnings = [];
   state.timeMs = 0;
   state.roi = null;
   state.source = "demo";
+  state.baseImageLoaded = false;
   metricTime.textContent = "-";
   metricHeart.textContent = "-";
   metricHead.textContent = "-";
@@ -252,9 +260,54 @@ function drawPolyline(points, color, dashed) {
   overlayCtx.restore();
 }
 
+function drawKeypoints(keypoints) {
+  if (!keypoints) {
+    return;
+  }
+  const width = overlayCanvas.width;
+  const height = overlayCanvas.height;
+  const flipped = Boolean(keypoints.flipped);
+  const items = [
+    { key: "palm_root", label: "掌根", color: colors.palmRoot },
+    { key: "tiger_mouth", label: "虎口", color: colors.tigerMouth },
+    { key: "palm_center", label: "掌心", color: colors.palmCenter },
+  ];
+
+  overlayCtx.save();
+  overlayCtx.lineWidth = 2;
+  overlayCtx.font = "12px serif";
+  items.forEach((item) => {
+    const pt = keypoints[item.key];
+    if (!pt) {
+      return;
+    }
+    let x = pt.x * width;
+    const y = pt.y * height;
+    if (flipped) {
+      x = width - x;
+    }
+    overlayCtx.fillStyle = item.color;
+    overlayCtx.strokeStyle = item.color;
+    overlayCtx.beginPath();
+    overlayCtx.arc(x, y, 6, 0, Math.PI * 2);
+    overlayCtx.fill();
+    overlayCtx.beginPath();
+    overlayCtx.moveTo(x - 8, y);
+    overlayCtx.lineTo(x + 8, y);
+    overlayCtx.moveTo(x, y - 8);
+    overlayCtx.lineTo(x, y + 8);
+    overlayCtx.stroke();
+    overlayCtx.fillText(item.label, x + 10, y - 8);
+  });
+  overlayCtx.restore();
+}
+
 function drawOverlay() {
   overlayCtx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
   if (!state.lines) {
+    return;
+  }
+  if (state.source === "backend" && !state.baseImageLoaded) {
     return;
   }
 
@@ -278,6 +331,9 @@ function drawOverlay() {
   }
   if (state.show.life) {
     drawPolyline(mapToRoi(state.lines.life, roi), colors.life, false);
+  }
+  if (state.show.keypoints) {
+    drawKeypoints(state.keypoints);
   }
 }
 
@@ -423,14 +479,18 @@ function handleFile(file) {
 
 function applyBackendResult(data) {
   state.lines = data.lines || null;
+  state.keypoints = data.keypoints || null;
   state.confidences = data.confidences || null;
   state.timeMs = data.time_ms || 0;
   state.warnings = data.warnings || [];
   state.roi = data.roi || DEFAULT_ROI;
   state.source = "backend";
   state.analysis = data.analysis || null;
+  state.baseImageLoaded = false;
   if (data.base_image) {
     renderBackendImage(data.base_image);
+  } else {
+    state.baseImageLoaded = true;
   }
   interpretButton.disabled = !state.lines;
   renderAnalysis(state.analysis);
@@ -446,6 +506,7 @@ function renderBackendImage(dataUrl) {
     ctx.clearRect(0, 0, imageCanvas.width, imageCanvas.height);
     ctx.drawImage(img, 0, 0);
     overlayCtx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
+    state.baseImageLoaded = true;
     // Repaint overlays after backend image replaces the base canvas.
     drawOverlay();
   };
@@ -529,6 +590,11 @@ document.getElementById("toggle-head").addEventListener("change", (event) => {
 
 document.getElementById("toggle-life").addEventListener("change", (event) => {
   state.show.life = event.target.checked;
+  drawOverlay();
+});
+
+document.getElementById("toggle-keypoints").addEventListener("change", (event) => {
+  state.show.keypoints = event.target.checked;
   drawOverlay();
 });
 
