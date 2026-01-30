@@ -1,4 +1,4 @@
-﻿# 测试样例评估报告
+# 测试样例评估报告
 
 ## 1. 样例信息
 
@@ -6,7 +6,7 @@
 
 - 文件名：`input/hand_01.jpg`
 
-  ![image-20260130110320004](E:\model-1.26\Internship\CarryCode\palmistry\docs\test.assets\image-20260130110320004.png)
+  ![image-20260130110320004](test.assets/image-20260130110320004.png)
 
 - 分辨率：1920x1080
 
@@ -45,7 +45,7 @@
   - 智慧线：部分断裂，但整体可辨
   - 生命线：起点正确，尾部略短
 
-![image-20260130111435869](E:\model-1.26\Internship\CarryCode\palmistry\docs\test.assets\image-20260130111435869.png)
+![image-20260130111435869](test.assets/image-20260130111435869.png)
 
 ------
 
@@ -57,7 +57,7 @@
 
 - 文件名：`input/hand_02.jpg`
 
-  ![image-20260130110959527](E:\model-1.26\Internship\CarryCode\palmistry\docs\test.assets\image-20260130110959527.png)
+  ![image-20260130110959527](test.assets/image-20260130110959527.png)
 
 - 分辨率：1920x1080
 
@@ -97,7 +97,7 @@
   - 智慧线：尾部略短，但整体可辨
   - 生命线：错误地将虎口的褶皱识别为生命线，但整体可辨
 
-![image-20260130111538675](E:\model-1.26\Internship\CarryCode\palmistry\docs\test.assets\image-20260130111538675.png)
+![image-20260130111538675](test.assets/image-20260130111538675.png)
 
 ------
 
@@ -107,7 +107,7 @@
 
 - 文件名：`input/hand_02.jpg`
 
-  ![image-20260130185616196](E:\model-1.26\Internship\CarryCode\palmistry\docs\test.assets\image-20260130185616196.png)
+  ![image-20260130185616196](test.assets/image-20260130185616196.png)
 
 - 分辨率：1920x1080
 
@@ -153,7 +153,7 @@
   - 智慧线：起点和尾部略短，但整体可辨
   - 生命线：起点和尾部略短，但整体可辨
 
-![image-20260130185731801](E:\model-1.26\Internship\CarryCode\palmistry\docs\test.assets\image-20260130185731801.png)
+![image-20260130185731801](test.assets/image-20260130185731801.png)
 
 ------
 
