@@ -741,6 +741,7 @@ function renderBackendImage(dataUrl) {
 async function requestBackend(file) {
   const form = new FormData();
   form.append("image", file);
+  form.append("pad_ratio", "0");
   const response = await fetch(API_URL, {
     method: "POST",
     body: form,

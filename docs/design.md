@@ -5,16 +5,25 @@
 ## 1. 系统方案概述（现有实现）
 
 1. **输入与预处理**  
-   - 读取图片（JPG/PNG/HEIC），EXIF 方向纠正，必要时边缘留白。  
+   - 读取图片（JPG/PNG），EXIF 方向纠正，必要时边缘留白。  
    - HSV 颜色阈值做简易手部背景抠取（`tools.remove_background`）。
+   
 2. **掌心校正（视角归一）**  
-   - MediaPipe Hands 提取 21 个关键点。  
+   - MediaPipe Hands 提取 **21 个关键点**。  
+   
+     ![image-20260130105051162](E:\model-1.26\Internship\CarryCode\palmistry\docs\design.assets\image-20260130105051162.png)
+   
    - 基于同一套“目标关键点”做单应性（Homography）对齐（`rectification.warp_with_matrix`）。
+   
 3. **掌纹检测（线条分割）**  
    - 使用 U-Net 进行掌纹区域分割（`model.UNet` + `detection.detect`）。  
+   
+     ![Unet论文超级详解（附图文：超细节超容易理解） - 知乎](https://tse2.mm.bing.net/th/id/OIP.OV5Uy-lub-UNyCQSMs_-zQHaE4?rs=1&pid=ImgDetMain&o=7&rm=3)
+   
 4. **三大主线识别**  
    - 对分割结果 skeletonize，构图后回溯得到候选线段。  
    - 用预训练 K-means 中心在特征空间选出三条线（`classification.classify`）。
+   
 5. **结果回映与展示**  
    - 将检测线反投影到原图并绘制（`read_palm.draw_lines_on_original`）。  
    - 输出 JSON（关键点、置信度、线段点集）与可视化图。

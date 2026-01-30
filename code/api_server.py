@@ -308,14 +308,24 @@ def call_palm_assistant(summary: Dict[str, object], user_id: str) -> Dict[str, o
     return parse_assistant_content(response_text)
 
 
-def preprocess_image(file_bytes: bytes) -> Dict[str, object]:
+def _parse_pad_ratio(raw_value: str, default: float = 0.12) -> float:
+    if raw_value is None:
+        return default
+    try:
+        value = float(str(raw_value).strip())
+    except (TypeError, ValueError):
+        return default
+    return clamp(value, 0.0, 0.4)
+
+
+def preprocess_image(file_bytes: bytes, pad_ratio: float = 0.12) -> Dict[str, object]:
     image = Image.open(io.BytesIO(file_bytes))
     image = ImageOps.exif_transpose(image).convert("RGB")
     orig_w, orig_h = image.size
     original_filename = f"upload_original_{uuid.uuid4().hex}.png"
     original_path = os.path.join(INPUT_DIR, original_filename)
     image.save(original_path, "PNG")
-    pad = int(min(image.size) * 0.12)
+    pad = int(min(image.size) * pad_ratio)
     if pad > 0:
         image = ImageOps.expand(image, border=pad, fill=(12, 12, 12))
     filename = f"upload_{uuid.uuid4().hex}.png"
@@ -328,6 +338,51 @@ def preprocess_image(file_bytes: bytes) -> Dict[str, object]:
         "padded_size": image.size,
         "pad": pad,
     }
+
+
+def _run_once(
+    file_bytes: bytes, pad_ratio: float
+) -> Tuple[
+    Dict[str, List[Dict[str, float]]],
+    Dict[str, float],
+    str,
+    Dict[str, object],
+    str,
+    str,
+    Tuple[int, int],
+]:
+    preprocess = preprocess_image(file_bytes, pad_ratio=pad_ratio)
+    input_path = preprocess["path"]
+    original_path = preprocess["original_path"]
+    orig_size = preprocess["orig_size"]
+    pad = preprocess["pad"]
+    padded_size = preprocess["padded_size"]
+    base_image_data_url = load_image_data_url(original_path)
+    try:
+        lines, confidences, base_image, keypoints, error_code = run_pipeline(
+            input_path, orig_size=orig_size, pad=pad, padded_size=padded_size
+        )
+        if lines:
+            save_result_image(
+                original_path,
+                lines,
+                keypoints,
+                os.path.join(RESULTS_DIR, "result.jpg"),
+            )
+        return (
+            lines,
+            confidences,
+            base_image_data_url,
+            keypoints,
+            error_code,
+            original_path,
+            orig_size,
+        )
+    finally:
+        if os.path.exists(input_path):
+            os.remove(input_path)
+        if os.path.exists(original_path):
+            os.remove(original_path)
 
 
 def load_image_data_url(path: str) -> str:
@@ -407,6 +462,7 @@ def run_pipeline(
     input_path: str,
     orig_size: Tuple[int, int] = None,
     pad: int = 0,
+    padded_size: Tuple[int, int] = None,
 ) -> Tuple[
     Dict[str, List[Dict[str, float]]],
     Dict[str, float],
@@ -423,9 +479,13 @@ def run_pipeline(
 
     remove_background(input_path, clean_path)
 
+    fallback_used = False
     warp_result, homography, warped_size = warp_with_matrix(input_path, warped_path)
     if warp_result is None:
-        return {}, {}, "", {}, "warp_failed"
+        fallback_used = True
+        homography = None
+        warped_size = padded_size or orig_size
+        warped_path = input_path
 
     remove_background(warped_path, warped_clean_path)
     resize(
@@ -459,11 +519,29 @@ def run_pipeline(
         if mapped.get("life"):
             mapped["life"] = extend_polyline_normalized(mapped["life"], orig_size)
         output_lines = mapped
+    elif orig_size and padded_size:
+        padded_w, padded_h = padded_size
+        orig_w, orig_h = orig_size
+        mapped = {}
+        for key, value in output_lines.items():
+            mapped_points = []
+            for pt in value:
+                x_padded = pt["x"] * padded_w
+                y_padded = pt["y"] * padded_h
+                x_unpadded = x_padded - pad
+                y_unpadded = y_padded - pad
+                x_norm = clamp(x_unpadded / max(1, orig_w), 0.0, 1.0)
+                y_norm = clamp(y_unpadded / max(1, orig_h), 0.0, 1.0)
+                mapped_points.append({"x": float(x_norm), "y": float(y_norm)})
+            mapped[key] = mapped_points
+        output_lines = mapped
     confidences = {
         "heart": line_confidence(lines[0]),
         "head": line_confidence(lines[1]),
         "life": line_confidence(lines[2]),
     }
+    if fallback_used:
+        return output_lines, confidences, result_data_url, keypoints_payload, "warp_fallback"
     return output_lines, confidences, result_data_url, keypoints_payload, ""
 
 
@@ -632,45 +710,43 @@ def predict():
         )
 
     start = time.time()
-    preprocess = preprocess_image(file.read())
-    input_path = preprocess["path"]
-    original_path = preprocess["original_path"]
-    orig_size = preprocess["orig_size"]
-    pad = preprocess["pad"]
-    base_image_data_url = load_image_data_url(original_path)
-
+    pad_ratio = _parse_pad_ratio(
+        request.form.get("pad_ratio") or request.args.get("pad_ratio"), default=0.12
+    )
+    file_bytes = file.read()
     try:
-        lines, confidences, base_image, keypoints, error_code = run_pipeline(
-            input_path, orig_size=orig_size, pad=pad
-        )
-        if error_code:
-            message, suggestions = build_failure_payload(error_code)
-            return jsonify(
-                {
-                    "ok": False,
-                    "error": message,
-                    "suggestions": suggestions,
-                    "time_ms": int((time.time() - start) * 1000),
-                }
-            )
-        if lines:
-            save_result_image(
-                original_path,
-                lines,
-                keypoints,
-                os.path.join(RESULTS_DIR, "result.jpg"),
-            )
+        (
+            lines,
+            confidences,
+            base_image_data_url,
+            keypoints,
+            error_code,
+            _,
+            _,
+        ) = _run_once(file_bytes, pad_ratio)
+        if pad_ratio == 0.0 and error_code == "warp_fallback":
+            retry_pad = 0.06
+            (
+                retry_lines,
+                retry_confidences,
+                retry_base_image,
+                retry_keypoints,
+                retry_error_code,
+                _,
+                _,
+            ) = _run_once(file_bytes, retry_pad)
+            if retry_lines and retry_error_code == "":
+                lines = retry_lines
+                confidences = retry_confidences
+                base_image_data_url = retry_base_image
+                keypoints = retry_keypoints
+                error_code = retry_error_code
     except Exception as exc:
         APP.logger.exception("Pipeline failed")
         return (
             jsonify({"ok": False, "error": "pipeline failed", "detail": str(exc)}),
             500,
         )
-    finally:
-        if os.path.exists(input_path):
-            os.remove(input_path)
-        if os.path.exists(original_path):
-            os.remove(original_path)
 
     if not lines:
         message, suggestions = build_failure_payload("line_detection_failed")
@@ -683,12 +759,16 @@ def predict():
             }
         )
 
+    warnings = []
+    if error_code == "warp_fallback":
+        warnings.append("校正失败，已使用原图识别，结果可能略有偏差。")
+
     response = {
         "ok": True,
         "lines": lines,
         "confidences": confidences,
         "time_ms": int((time.time() - start) * 1000),
-        "warnings": [],
+        "warnings": warnings,
         "roi": {"x": 0.0, "y": 0.0, "w": 1.0, "h": 1.0},
         "base_image": base_image_data_url,
         "keypoints": keypoints,
@@ -725,45 +805,47 @@ def palm_analysis():
                 jsonify({"ok": False, "error": message, "suggestions": suggestions}),
                 400,
             )
-        preprocess = preprocess_image(file.read())
-        input_path = preprocess["path"]
-        original_path = preprocess["original_path"]
-        orig_size = preprocess["orig_size"]
-        pad = preprocess["pad"]
-        base_image_data_url = load_image_data_url(original_path)
+        pad_ratio = _parse_pad_ratio(
+            request.form.get("pad_ratio") or request.args.get("pad_ratio"), default=0.12
+        )
+        file_bytes = file.read()
         try:
-            lines, confidences, base_image, keypoints, error_code = run_pipeline(
-                input_path, orig_size=orig_size, pad=pad
-            )
-            if error_code:
-                message, suggestions = build_failure_payload(error_code)
-                return jsonify(
-                    {
-                        "ok": False,
-                        "error": message,
-                        "suggestions": suggestions,
-                        "time_ms": int((time.time() - start) * 1000),
-                    }
-                )
-            if lines:
-                save_result_image(
-                    original_path,
-                    lines,
-                    keypoints,
-                    os.path.join(RESULTS_DIR, "result.jpg"),
-                )
+            (
+                lines,
+                confidences,
+                base_image_data_url,
+                keypoints,
+                error_code,
+                _,
+                _,
+            ) = _run_once(file_bytes, pad_ratio)
+            if pad_ratio == 0.0 and error_code == "warp_fallback":
+                retry_pad = 0.06
+                (
+                    retry_lines,
+                    retry_confidences,
+                    retry_base_image,
+                    retry_keypoints,
+                    retry_error_code,
+                    _,
+                    _,
+                ) = _run_once(file_bytes, retry_pad)
+                if retry_lines and retry_error_code == "":
+                    lines = retry_lines
+                    confidences = retry_confidences
+                    base_image_data_url = retry_base_image
+                    keypoints = retry_keypoints
+                    error_code = retry_error_code
         except Exception as exc:
             APP.logger.exception("Pipeline failed")
             return (
                 jsonify({"ok": False, "error": "pipeline failed", "detail": str(exc)}),
                 500,
             )
-        finally:
-            if os.path.exists(input_path):
-                os.remove(input_path)
-            if os.path.exists(original_path):
-                os.remove(original_path)
         base_image_out = base_image_data_url
+        warnings = []
+        if error_code == "warp_fallback":
+            warnings.append("校正失败，已使用原图识别，结果可能略有偏差。")
     else:
         payload = request.get_json(silent=True) or {}
         user_id = str(payload.get("user_id") or payload.get("userId") or "")
@@ -798,6 +880,7 @@ def palm_analysis():
             "roi": roi,
             "base_image": base_image_out,
             "keypoints": keypoints,
+            "warnings": warnings if "warnings" in locals() else [],
             "time_ms": int((time.time() - start) * 1000),
         }
     )
