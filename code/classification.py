@@ -266,6 +266,84 @@ def classify_lines(centers, lines, image_height, image_width):
     
     return classified_lines
 
+
+def _line_points(line, stride=2):
+    if not line:
+        return []
+    return [(pt[0], pt[1]) for i, pt in enumerate(line) if i % stride == 0]
+
+
+def _overlap_ratio(line_a, line_b, thresh=6.0):
+    if not line_a or not line_b:
+        return 0.0
+    pts_a = _line_points(line_a, stride=2)
+    pts_b = _line_points(line_b, stride=2)
+    if not pts_a or not pts_b:
+        return 0.0
+    thresh_sq = thresh * thresh
+    close = 0
+    for ya, xa in pts_a:
+        min_dist_sq = None
+        for yb, xb in pts_b:
+            dy = ya - yb
+            dx = xa - xb
+            dist_sq = dy * dy + dx * dx
+            if min_dist_sq is None or dist_sq < min_dist_sq:
+                min_dist_sq = dist_sq
+                if min_dist_sq <= thresh_sq:
+                    break
+        if min_dist_sq is not None and min_dist_sq <= thresh_sq:
+            close += 1
+    return close / max(1, len(pts_a))
+
+
+def select_lines_with_overlap_penalty(
+    centers, lines, image_height, image_width, top_k=6, overlap_threshold=0.35
+):
+    if not lines:
+        return [None, None, None]
+    feature_list = np.empty((0, 24))
+    for line in lines:
+        feature = extract_feature(line, image_height, image_width)
+        feature_list = np.vstack((feature_list, feature))
+
+    num_lines = len(lines)
+    dist = np.zeros((num_lines, 3), dtype=np.float32)
+    for j in range(num_lines):
+        for i in range(3):
+            dist[j, i] = np.linalg.norm(feature_list[j] - centers[i])
+
+    candidate_indices = []
+    for i in range(3):
+        order = np.argsort(dist[:, i])
+        candidate_indices.append(list(order[: min(top_k, num_lines)]))
+
+    best = None
+    best_score = None
+    for i0 in candidate_indices[0]:
+        for i1 in candidate_indices[1]:
+            if i1 == i0:
+                continue
+            for i2 in candidate_indices[2]:
+                if i2 == i0 or i2 == i1:
+                    continue
+                base = float(dist[i0, 0] + dist[i1, 1] + dist[i2, 2])
+                overlap = 0.0
+                overlap += _overlap_ratio(lines[i0], lines[i1])
+                overlap += _overlap_ratio(lines[i0], lines[i2])
+                overlap += _overlap_ratio(lines[i1], lines[i2])
+                penalty = 0.0
+                if overlap / 3.0 > overlap_threshold:
+                    penalty = 1000.0 * (overlap / 3.0)
+                score = base + penalty
+                if best_score is None or score < best_score:
+                    best_score = score
+                    best = (i0, i1, i2)
+
+    if not best:
+        return classify_lines(centers, lines, image_height, image_width)
+    return [lines[best[0]], lines[best[1]], lines[best[2]]]
+
 ### 3. Color each line ###
 
 # color lines with BGR
@@ -361,7 +439,9 @@ def classify(path_to_palmline_image):
     #cv2.imwrite('results/skel.jpg',skel_img)
     
     lines = group(skel_img)  # get candidate lines
-    lines = classify_lines(centers, lines, palmline_img.shape[0], palmline_img.shape[1])  # choose 3 lines from candidates
+    lines = select_lines_with_overlap_penalty(
+        centers, lines, palmline_img.shape[0], palmline_img.shape[1]
+    )  # choose 3 lines from candidates with overlap check
     # colored_img = color(skel_img, classified_lines) # color 3 lines (RGB)
 
     return lines
