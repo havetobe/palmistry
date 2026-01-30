@@ -28,7 +28,7 @@ python code/api_server.py
 接口：`/api/predict`、`/api/palm/analysis`
 
 启动成功：
-![image-20260130165637789](E:\model-1.26\Internship\CarryCode\palmistry\README.assets\image-20260130165637789.png)
+![image-20260130165637789](README.assets/image-20260130165637789.png)
 
 ### 4) 启动 H5 前端演示
 ```bash
@@ -46,10 +46,10 @@ python -m http.server 8001
 ```
 
 建议安装插件：open in brower，即可右键快速启动。
-![image-20260130165721598](E:\model-1.26\Internship\CarryCode\palmistry\README.assets\image-20260130165721598.png)
+![image-20260130165721598](README.assets/image-20260130165721598.png)
 
 启动成功：
-![image-20260130165704521](E:\model-1.26\Internship\CarryCode\palmistry\README.assets\image-20260130165704521.png)
+![image-20260130165704521](README.assets/image-20260130165704521.png)
 
 ### 5) 命令行单张图片测试（可选）
 
@@ -78,4 +78,4 @@ PALM_ASSISTANT_ID=your_appid
 PALM_ASSISTANT_ENDPOINT=https://yuanqi.tencent.com/openapi/v1/agent/chat/completions
 ```
 - `your_appkey` 与 `your_appid` 可在“应用发布” -> “服务状态”中查看。
-![image-20260130170245639](E:\model-1.26\Internship\CarryCode\palmistry\README.assets\image-20260130170245639.png)
+![image-20260130170245639](README.assets/image-20260130170245639.png)
