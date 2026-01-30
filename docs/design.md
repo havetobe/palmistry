@@ -1,4 +1,4 @@
-﻿# 技术选型与调查报告
+# 技术选型与调查报告
 
 本文档基于当前项目实现（`code/read_palm.py` 与 `code/api_server.py`）总结技术选型原因、可替代方案与失败场景，面向“掌纹三大主线识别与绘制”的交付要求。
 
@@ -11,7 +11,7 @@
 2. **掌心校正（视角归一）**  
    - MediaPipe Hands 提取 **21 个关键点**。  
    
-     ![image-20260130105051162](E:\model-1.26\Internship\CarryCode\palmistry\docs\design.assets\image-20260130105051162.png)
+    ![image-20260130105051162](design.assets/image-20260130105051162.png)
    
    - 基于同一套“目标关键点”做单应性（Homography）对齐（`rectification.warp_with_matrix`）。
    
