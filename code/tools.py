@@ -57,7 +57,7 @@ def print_error():
     print('Palm lines not properly detected! Please use another palm image.')
 
 def extract_semantic_keypoints(path_to_image):
-    # Approximate semantic points from MediaPipe hand landmarks.
+    # 基于 MediaPipe 关键点近似推导语义点位。
     import mediapipe as mp
 
     image = cv2.flip(cv2.imread(path_to_image), 1)
@@ -85,29 +85,28 @@ def extract_semantic_keypoints(path_to_image):
         ring_mcp = to_xy(mp_hands.HandLandmark.RING_FINGER_MCP.value)
         pinky_mcp = to_xy(mp_hands.HandLandmark.PINKY_MCP.value)
 
-        # Weighted center to push palm_center slightly upward from the wrist.
+        # 加权得到掌心中心点，并略微向上偏移。
         palm_center = [
             (0.10 * wrist[0] + 0.225 * index_mcp[0] + 0.25 * middle_mcp[0] + 0.225 * ring_mcp[0] + 0.20 * pinky_mcp[0]),
             (0.10 * wrist[1] + 0.225 * index_mcp[1] + 0.25 * middle_mcp[1] + 0.225 * ring_mcp[1] + 0.20 * pinky_mcp[1]),
         ]
-        # Tiger mouth near the gap between thumb base and index base.
-        # Move the tiger_mouth toward thumb root by shifting from index_mcp toward thumb_cmc.
-        # Tiger mouth: midpoint of thumb CMC and index MCP,
-        # then a stronger shift toward thumb side and a smaller shift upward.
+        # 虎口位置：基于拇指根部与食指根部的几何关系推导。
+        # 从 index_mcp 向 thumb_cmc 偏移，使点位更靠近拇指根部。
+        # 先取拇指 CMC 与食指 MCP 的中点，再向拇指侧与上方微调。
         def _norm(vx, vy):
             n = (vx * vx + vy * vy) ** 0.5
             if n == 0:
                 return 0.0, 0.0
             return vx / n, vy / n
 
-        # Shift closer to thumb IP (landmark 3) per feedback.
+        # 将虎口位置进一步向拇指 IP（关键点 3）靠近。
         thumb_ip = to_xy(mp_hands.HandLandmark.THUMB_IP.value)
         thumb_tip = to_xy(mp_hands.HandLandmark.THUMB_TIP.value)
-        # Shift further toward thumb IP/tip (3/4).
+        # 加权更偏向 thumb IP / tip 方向。
         base_x = 0.50 * thumb_cmc[0] + 0.10 * index_mcp[0] + 0.25 * thumb_ip[0] + 0.15 * thumb_tip[0]
         base_y = 0.50 * thumb_cmc[1] + 0.10 * index_mcp[1] + 0.25 * thumb_ip[1] + 0.15 * thumb_tip[1]
 
-        # Use handedness to stabilize the thumb direction.
+        # 根据左右手稳定拇指方向。
         handedness_label = "Unknown"
         if results.multi_handedness:
             handedness_label = results.multi_handedness[0].classification[0].label
@@ -120,7 +119,7 @@ def extract_semantic_keypoints(path_to_image):
         utx, uty = _norm(v_thumb_x, v_thumb_y)
         uux, uuy = _norm(v_up_x, v_up_y)
 
-        # Ensure thumb direction points left for Left hand and right for Right hand.
+        # 保证左手拇指方向向左、右手拇指方向向右。
         if handedness_label == "Left" and utx > 0:
             utx, uty = -utx, -uty
         elif handedness_label == "Right" and utx < 0:
@@ -194,7 +193,7 @@ def annotate_keypoints_on_image(path_to_image, keypoints):
         draw.line((x, y - r, x, y + r), fill=color, width=3)
         draw.text((x + r + 4, y - r - 6), label, fill=color)
 
-    # Overlay MediaPipe 21 landmark indices for precise tuning.
+    # 叠加 MediaPipe 21 个关键点编号，方便精细调参。
     lm_color = (0, 0, 0)
     lm_r = 3
     all_landmarks = keypoints.get("all_landmarks", [])

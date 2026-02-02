@@ -7,31 +7,29 @@ from skimage.morphology import skeletonize
 import mediapipe as mp
 
 #########################################################################################
-# Sketch of idea                                                                        #
-# - Build a graph : nodes = end pt. + intersection pt.                                  #
-#                  edges = line segments (save pixel coordinates with next direction)   #
-# - Find all possible paths(lines) from graph : graph backtracking                      #
-# - Find three lines nearest to each cluster centers in feature space                   #
-#   Find cluster centers using k-means clustering (k=3)                                 #
+# 思路概览                                                                              #
+# - 构建图结构：节点=端点+交叉点，边=线段（保存像素与方向）                              #
+# - 通过回溯枚举图中的所有可能路径                                                      #
+# - 在特征空间中选择最接近三个聚类中心的三条线                                           #
+#   聚类中心可由 k-means (k=3) 得到                                                     #
 #########################################################################################
 
-# code reference: https://google.github.io/mediapipe/solutions/hands.html
-# data reference: https://drive.google.com/file/d/1B4uj-b4RuUNkC_oeCsRkuih4rjuQ6tHH/view
+# 代码参考: https://google.github.io/mediapipe/solutions/hands.html
+# 数据参考: https://drive.google.com/file/d/1B4uj-b4RuUNkC_oeCsRkuih4rjuQ6tHH/view
 
 ### 0. Load Data ###
 
-# PLSU folder should exist in advance
-# rectify images in PLSU folder
-# find homography matrix using original image
-# then apply homography matrix to detected line image
-# input is the number 'idx' from image{idx}.jpg(.png)
+# 需要提前准备 PLSU 数据集目录
+# 对 PLSU 图像进行校正
+# 先用原图求单应矩阵，再应用到线条图上
+# 输入为 image{idx}.jpg(.png) 的编号 idx
 def rectify(idx):
     img_path = './PLSU/PLSU/'
     image = cv2.imread(img_path + 'img/image' + str(idx) +'.jpg')
     image_mask = cv2.imread(img_path + 'Mask/image' + str(idx) + '.png', cv2.IMREAD_GRAYSCALE)
     mp_hands = mp.solutions.hands
 
-    # 7 landmark points (normalized)
+    # 21 个关键点的目标模板（归一化坐标）
     pts_index = list(range(21))
     pts_target_normalized = np.float32([[1-0.48203104734420776, 0.9063420295715332],
                                         [1-0.6043621301651001, 0.8119394183158875],
@@ -72,17 +70,17 @@ def rectify(idx):
 
 # load rectified data from PLSU to new folder
 def load_data(num_data):
-    # make directory
+    # 创建输出目录
     data_path = './line_sample'
     result_path = './line_sample_result'
     path_list = [data_path, result_path]
     for path in path_list:
         os.makedirs(path, exist_ok=True)
         
-    # count the current number of data
+    # 统计已有样本数量
     cur_num_data = len(os.listdir(data_path))
     
-    # load rectified data from PLSU data
+    # 从 PLSU 数据集中加载并校正
     offset = 50
     img_path_list = [img_path for img_path in glob.glob('./PLSU/PLSU/Img/*')][offset+cur_num_data:offset+num_data]
     for i,img_path in enumerate(img_path_list):
@@ -93,17 +91,17 @@ def load_data(num_data):
 
 ### 1. Find possible lines ###
 
-# connect seperated lines by gradient
+# 使用梯度连接断裂线条（备用思路）
 # https://stackoverflow.com/questions/63727525/how-to-connect-broken-lines-that-cannot-be-connected-by-erosion-and-dilation
 # https://stackoverflow.com/questions/43859750/how-to-connect-broken-lines-in-a-binary-image-using-python-opencv
 
-# find all possible lines by graph backtracking
-# lines_node : list of lines represented by nodes // ex. [[node0, ..., node3], ..., [node2, ..., node4]]
-# temp : list of nodes up to now
-# graph : node -> {adj. node -> line between two node} (dictionary type)
-# visited_node : visited nodes up to now
-# finished_node : visited nodes at least once
-# node : current node
+# 通过图回溯找到所有可能线段
+# lines_node : 由节点序列表示的线段集合
+# temp : 当前回溯路径上的节点序列
+# graph : 节点 -> {相邻节点 -> 两节点间线段}（字典）
+# visited_node : 当前路径已访问节点
+# finished_node : 至少访问过一次的节点
+# node : 当前节点
 def backtrack(lines_node, temp, graph, visited_node, finished_node, node):
     end_pt = True
     for next_node in graph[node].keys():
@@ -115,21 +113,20 @@ def backtrack(lines_node, temp, graph, visited_node, finished_node, node):
             backtrack(lines_node, temp, graph, visited_node, finished_node, next_node)
             del temp[-1]
             visited_node[next_node] = False
-    # if there is no way to preceed, current node is the end node
-    # add current line to the list
+    # 若无法继续前进，则当前节点为终点，将路径加入候选线段
     if end_pt:
         line_node = []
         line_node.extend(temp)
         lines_node.append(line_node)
 
-# find possible lines
-# (1) build a graph
-# (2) find all possible lines by graph backtracking
-# (3) filter lines with length, direction criteria
+# 查找所有可能线段：
+# (1) 构图
+# (2) 回溯枚举路径
+# (3) 按长度与方向过滤
 def group(img):
-    # (1) build a graph
+    # (1) 构建图结构
     
-    # (1)-1 find all nodes
+    # (1)-1 找出所有节点
     count = np.zeros(img.shape)
     nodes = []
 
@@ -140,10 +137,10 @@ def group(img):
             if count[j, i] == 1 or count[j, i] >= 3:
                 nodes.append((j, i))
 
-    # sort nodes to traverse from upper-left to lower-right
+    # 节点按从左上到右下排序，保证遍历顺序稳定
     nodes.sort(key = lambda x : x[0]+x[1])
      
-    # (1)-2 save all connections
+    # (1)-2 保存节点间连接关系
     graph = dict()
     for node in nodes:
         graph[node] = dict()
@@ -176,7 +173,7 @@ def group(img):
                 next_pos = np.transpose(np.nonzero(around))
                 if next_pos.shape[0] == 0: break
                 
-                # update line
+                # 更新线段路径
                 next_y = y + next_pos[0][0] - 1
                 next_x = x + next_pos[0][1] - 1
                 dy,dx = next_y-y,next_x-x
@@ -185,7 +182,7 @@ def group(img):
                 temp_line.append([next_y, next_x, dy, dx])
                 not_visited[next_y, next_x] = 0
                 
-                # check end condition
+                # 检查是否到达终点节点
                 if count[next_y, next_x] == 1 or count[next_y, next_x] >= 3:
                     #if len(temp_line) > 10:
                     graph[tuple(temp_line[0][:2])][tuple(temp_line[-1][:2])] = temp_line
@@ -196,7 +193,7 @@ def group(img):
         not_visited[node[0], node[1]] = 1
 
 
-    # (2) find all possible lines by graph backtracking
+    # (2) 回溯枚举所有可能线段
     lines_node = []
     visited_node = dict()
     finished_node = dict()
@@ -211,7 +208,7 @@ def group(img):
             finished_node[node] = True
             backtrack(lines_node, temp, graph, visited_node, finished_node, node)
     
-    # (3) filter lines with length, direction criteria
+    # (3) 按长度与方向过滤候选线段
     lines = []
     for line_node in lines_node:
         num_node = len(line_node)
@@ -221,13 +218,14 @@ def group(img):
         prev,cur = None,line_node[0]
         for i in range(1,num_node):
             nxt = line_node[i]
-            # if the inner product of two connected line segments vectors is <0, discard it
+            # 若相邻线段方向点积 < 0，说明方向反转，丢弃
             if i>1 and (cur[0]-prev[0])*(nxt[0]-cur[0])+(cur[1]-prev[1])*(nxt[1]-cur[1])<0:
                 wrong = True
                 break
             line.extend(graph[cur][nxt])
             prev,cur = cur,nxt
-        # if the length is <10, discard it
+        # 长度 < 10 的线段直接丢弃
+        # 可优化：改为软惩罚或按弯曲度阈值过滤
         if wrong or len(line) < 10: continue
         lines.append(line)
     
@@ -235,8 +233,7 @@ def group(img):
 
 ### 2. Choose three lines ###
 
-# classify lines using l2 distance with centers in feature space
-# remain at most 3 lines
+# 使用特征空间 L2 距离对线段分类，最多保留三条
 def classify_lines(centers, lines, image_height, image_width):
     classified_lines = [None, None, None]
     line_idx = [None, None, None]
@@ -346,7 +343,7 @@ def select_lines_with_overlap_penalty(
 
 ### 3. Color each line ###
 
-# color lines with BGR
+# 按 BGR 颜色绘制三条线
 def color(skel_img, lines):
     color_list = [[255,0,0], [0,255,0], [0,0,255]] # [B,G,R]
     
@@ -362,10 +359,10 @@ def color(skel_img, lines):
 
 ### Others ###
 
-# extract feature from a line
+# 从线段中提取特征
 def extract_feature(line, image_height, image_width):
-    # feature = [min_y, min_x, max_y, max_x] + mean of direction info(dy,dx) * N intervals
-    # => (2N+4)-dim
+    # 特征 = [min_y, min_x, max_y, max_x] + N 段方向均值(dy,dx)
+    # => (2N+4) 维
     image_size = np.array([image_height, image_width], dtype=np.float32)
     feature = np.append(np.min(line, axis=0)[:2]/image_size, np.max(line, axis=0)[:2]/image_size)
     feature *= 10
@@ -377,17 +374,17 @@ def extract_feature(line, image_height, image_width):
     return feature
       
 
-# find 3 cluster centers in feature space
-# we can use pre-trained centers for testing
+# 在特征空间中获取 3 个聚类中心
+# 也可使用预先训练好的中心用于测试
 def get_cluster_centers(new_centers=False):
     if new_centers:
-        # prepare good samples
+        # 准备优质样本
         good = [12,104,193,212,220,249,256,295,304,396,402,487,698,908,992]
         for idx in good:
             rectified = rectify(idx)
             cv2.imwrite("good_sample/image"+str(idx)+".png",rectified)
         
-        # put all data in feature space
+        # 将全部数据映射到特征空间
         data = np.empty((0,24))
         for img_path in glob.glob("good_sample/*.png"):
             img = cv2.imread(img_path)
@@ -397,11 +394,11 @@ def get_cluster_centers(new_centers=False):
                 feature = extract_feature(line, 1024, 1024)
                 data = np.vstack((data,feature))
         
-        # k-means clustering (k=3)
+        # k-means 聚类（k=3）
         criteria = (cv2.TERM_CRITERIA_EPS|cv2.TERM_CRITERIA_MAX_ITER, 10, 1.0)
         ret, label, centers = cv2.kmeans(data.astype(np.float32), 3, None, criteria, 10, cv2.KMEANS_RANDOM_CENTERS)
         
-        # sort centers according to max_y
+        # 按 max_y 排序，保持一致性
         centers = list(centers)
         centers.sort(key = lambda x : x[2])
     else:
@@ -423,11 +420,11 @@ def get_cluster_centers(new_centers=False):
     return centers
 
 def classify(path_to_palmline_image):
-    # load (rectified) test data
+    # 加载（已校正的）测试数据
     # num_data = 10
     # load_data(num_data)
     
-    # get cluster centers
+    # 获取聚类中心
     centers = get_cluster_centers()
 
     palmline_img = cv2.imread(path_to_palmline_image)
@@ -436,12 +433,12 @@ def classify(path_to_palmline_image):
     # eroded = cv2.erode(dilated, kernel, iterations=3)
     skel_img = cv2.cvtColor(skeletonize(palmline_img), cv2.COLOR_BGR2GRAY)
     
-    #cv2.imwrite('results/skel.jpg',skel_img)
+    # 可选：保存骨架图用于调试
     
-    lines = group(skel_img)  # get candidate lines
+    lines = group(skel_img)  # 获取候选线段
     lines = select_lines_with_overlap_penalty(
         centers, lines, palmline_img.shape[0], palmline_img.shape[1]
-    )  # choose 3 lines from candidates with overlap check
-    # colored_img = color(skel_img, classified_lines) # color 3 lines (RGB)
+    )  # 考虑重叠惩罚，从候选中选出 3 条主线
+    # colored_img = color(skel_img, classified_lines)  # 可选：上色可视化
 
     return lines

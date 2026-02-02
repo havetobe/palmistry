@@ -2,13 +2,13 @@ import numpy as np
 import cv2
 import mediapipe as mp
 
-# code reference: https://google.github.io/mediapipe/solutions/hands.html
+# 代码参考: https://chuoling.github.io/mediapipe/solutions/hands.html
 
 WARP_SUCCESS = 1
 EDGE_MARGIN = 0.02
 
 def warp_with_matrix(path_to_image, path_to_warped_image):
-    # 7 landmark points (normalized)
+    # 21 个关键点的目标模板（归一化坐标）
     pts_index = list(range(21))
     pts_target_normalized = np.float32([
         [1 - 0.48203104734420776, 0.9063420295715332],
@@ -36,7 +36,7 @@ def warp_with_matrix(path_to_image, path_to_warped_image):
 
     mp_hands = mp.solutions.hands
     with mp_hands.Hands(static_image_mode=True, max_num_hands=1, min_detection_confidence=0.5) as hands:
-        # 1. Extract 21 landmark points
+        # 1) 提取 21 个手部关键点
         image = cv2.flip(cv2.imread(path_to_image), 1)
         results = hands.process(cv2.cvtColor(image, cv2.COLOR_BGR2RGB))
         image_height, image_width, _ = image.shape
@@ -52,7 +52,7 @@ def warp_with_matrix(path_to_image, path_to_warped_image):
             or max(ys) > 1 - EDGE_MARGIN
         ):
             return None, None, None
-        # 2. Align images
+        # 2) 计算单应并对齐图像
         pts = np.float32(
             [
                 [

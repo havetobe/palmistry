@@ -11,6 +11,7 @@ from measurement import *
 
 
 def map_line_to_original(line, homography, warped_size, orig_size, src_size):
+    # 通过单应矩阵的逆变换，将线段点从模型空间映射回原图坐标。
     warped_w, warped_h = warped_size
     orig_w, orig_h = orig_size
     src_w, src_h = src_size
@@ -33,6 +34,7 @@ def map_line_to_original(line, homography, warped_size, orig_size, src_size):
 
 
 def extend_polyline(points, ratio=0.2, min_px=12.0, max_px=60.0):
+    # 延长折线的末端，使生命线末尾覆盖更完整。
     if len(points) < 2:
         return points
     p0 = points[-2]
@@ -55,6 +57,7 @@ def extend_polyline(points, ratio=0.2, min_px=12.0, max_px=60.0):
 
 
 def draw_lines_on_original(path_to_input_image, lines, homography, warped_size, output_path, src_size):
+    # 在原图上绘制三条主线，输出可视化结果。
     im = ImageOps.exif_transpose(Image.open(path_to_input_image)).convert("RGB")
     draw = ImageDraw.Draw(im)
     width = 6
@@ -71,6 +74,7 @@ def draw_lines_on_original(path_to_input_image, lines, homography, warped_size, 
     im.save(output_path)
 
 def main(input):
+    # 主流程入口：预处理 -> 校正 -> 分割 -> 分类 -> 渲染。
     path_to_input_image = 'input/{}'.format(input)
 
     results_dir = './results'
@@ -87,35 +91,38 @@ def main(input):
     path_to_result = 'results/result.jpg'
     path_to_keypoints = 'results/keypoints.json'
 
-    # 0. Preprocess image
+    # 0) 预处理：去除背景干扰。
     remove_background(path_to_input_image, path_to_clean_image)
 
-    # 1. Palm image rectification
+    # 1) 校正：将掌心对齐到标准姿态。
     warp_result, homography, warped_size = warp_with_matrix(
         path_to_input_image, path_to_warped_image
     )
     if warp_result is None:
         print_error()
     else:
+        # 保留校正后的原图与去背景版本。
         remove_background(path_to_warped_image, path_to_warped_image_clean)
         resize(path_to_warped_image, path_to_warped_image_clean, path_to_warped_image_mini, path_to_warped_image_clean_mini, resize_value)
 
+        # 提取语义关键点，后续用于标注展示。
         keypoints = extract_semantic_keypoints(path_to_input_image)
         save_keypoints(keypoints, path_to_keypoints)
 
-        # 2. Principal line detection
+        # 2) 主线检测：U-Net 分割掌纹线条。
         net = UNet(n_channels=3, n_classes=1)
         net.load_state_dict(torch.load(path_to_model, map_location=torch.device('cpu')))
         detect(net, path_to_warped_image_clean, path_to_palmline_image, resize_value)
 
-        # 3. Line classification
+        # 3) 线条分类：骨架化 + 图结构分组 + 选择三条主线。
         lines = classify(path_to_palmline_image)
 
-        # 4. Save result on the original image
+        # 4) 将三条主线绘制回原图并保存。
         src_size = (resize_value, resize_value)
         draw_lines_on_original(
             path_to_input_image, lines, homography, warped_size, path_to_result, src_size
         )
+        # 叠加语义关键点便于调试与标注校验。
         annotate_keypoints_on_image(path_to_result, keypoints)
 
 if __name__ == '__main__':
